@@ -1,0 +1,408 @@
+K8s  -> open-source platform for managing containarized workload and services. 
+features:
+1. Container Orchestration: prmary purpose of K8s is to dynamically manage containers across multiple host systems. 
+2. Application Reliability : makes it easier to build reliable, sefl-healing and scalable apps.
+3. Automation: To help automate management of your container apps
+
+K8s Architechture overview:1.24
+
+Control plane                                         Nodes                   
+----------------------------------------------        --------------------------------------------------------
+|________________           _________________ |       |------->Kube Proxy Server|------>Kube Proxy Server    |
+|Kube Controller|---------> |Kube API Server|<------->|                         |                            |
+|____mgr________|           |_______________| |       |------->Kubelet          |------>Kubectl              |
+|                           ↑     |           |       |          ↓              |         ↓                  |
+| Kube Scheduler------------|     |           |       |     Container Runtime   |    Container Runtime       |                           
+|                           ↑     ↓           |       |     (docker/containerd) |     (docker/containerd)    |
+| Cloud Controller mgr------↑  ETCDCTL        |       |                         |                            |
+|_____________________________________________|       |_________________________|____________________________|
+
+
+Control plane: 
+is collection of multi components responsible for managing/controling K8s cluster globally. 
+Individual control plane components can run on any machine in the cluster. But usually run on dedicated controller machines.
+
+Kube-API-Server --> serves K8s API. primary interface to control plane and cluster itself. When interacting with K8s cluster we do so using K8s API.
+ETCD --> ETCD is stores the state of K8s cluster. X store app or db data
+Kube-Scheduler --> handles scheduling, the process of selecting an available node in cluster on which to run container. 
+Kube-Controller-Manager --> It runs a collection of multiple controller utilities like detecting failed pods and restarting them.
+Cloud controller manager --> provides an interface between K8s and cloud platform. It is only used when using cloud based resources with K8s. 
+
+K8s Nodes: 
+are machines where containers managed by the cluster run. cluster can have any number of  nodes. 
+Various node components manage containers on machine & communicate with control plane.
+
+Kubelet --> k8s agent runs on each node. It communicate with control plane and ensures that containers run on its node as instructed by control plane. 
+Kubelets also handles the process of reporting container status and other data about container back to control plane. 
+Container Runtime --> is not build into k8s. Its a separate peice of software that is responsible to run comtainer on each machine. K8s supports docker/containerd etc
+Kube-Proxy --> is network proxy. It runs on each node and provides networking between containers and services in the cluster. 
+
+Kubernates cluster:
+kubeadm is a tool that will simplify the process of setting of K8s cluster. 
+install containerd/docker --> install K8s packages (kubeadm,kubelet,kubectl) --> initialize cluster with <sudo kubeadm init --pod-network-cidr range --kubernates-version 1.24.0
+--> setup .kube config command from output for cluster communication --> execute join command on nodes from output --> deploy calico network plugin 
+
+K8s Namespaces: K8s objects such as pods and containers, live in namespaces. Namespaces are the way to separate and organize objects in cluster. or Namespaces provides thhe
+mechanism for isolating group of resources within single cluster. 
+4 default namespaces:
+1. default : as name says its defaukt namespac
+e when we create any k8s object
+2. kube-system - user dont have access to it. k8s object such as kubectl, api-server are created under kube-system namespace.
+3. kube-public - publically accessible k8s objects are created user kube-public like Congfigmap, secrete etc
+4. kube-node-lease - contains hear-beats of nodes in k8s cluster + each node has associated least object in namespace + determine availability of nodes
+
+kubectl get namespaces   ---list namespaces
+kubectl get pods --namespace or -n my-namepsace  --list pods from my-namespace if namespace name not given cmd will fetch pods from default namespace
+kubectl get pods --all-namespaces
+kubectl get pods -o wide --> get detailed info with PODS IP address and node name
+kubectl get nodes --> list cluster nodes
+
+
+High Availability in K8s:
+K8s facilitates high availability apps but you can also design the cluster itself to be highly available. To do this you need multiple control plane nodes.
+
+Control plane node1 ....control plane node2
+kube-api-server		 Kube-api-server									
+             ↑            ↑
+              Load balancer
+                 ↑
+Worker node1     ↑
+kubelets    -----↑
+
+1. Stacked ETCD   ---> ETCD runs on same control plane node
+2. External ETCD  ---> ETCD runs on separate machine but not on control plane node
+
+K8s Management tool: 
+There are variety of K8s management tools available. These tools interface with Kubernates to provide additonal functionality
+Kubectl --> Official CLI for K8s. it is the main method you will work with K8s.
+kubeadm --> is a tool that will simplify the process of setting of K8s cluster. 
+Minikube --> allows you to automatically set up a local single-node k8s cluster. Its great for k8s dev purposes. 
+Helm --> provides templating and package management for K8s objects. You can use it to manage your own templates (known as charts). you can download and use shared templates.
+Kompose --> helps you translate docker compose files into K8s objects. If you use docker compose for some of your workflow then can move apps to K8s using Kompose.
+Kustomize --> configuration management tool for managing K8s objects configurations.It allows you to share and re-use template configurations for K8s apps.
+
+
+Self draining K8s node: 
+when performing maintainance, you may sometimes need to remove K8s node from service. To do this, you can drain the node. 
+Containrs running on node will be gracefully terminated (and potentially rescheduled to another node)
+kubctl drain node-name
+kubectl drain node-name --ignore-daemonsets   (when draining a node you may need to ignore daemonsets i.e pods that are tied to each node. If you have any daemonset pods running on node then likely use --ignore-daemonset flag.
+
+uncordon node: 
+If node remains part of cluster, You can allow pods to run on node again when maintanance is complete using 
+kubectl uncordon node-name
+Note: uncordoning the node will not guarantee that pods get restored on same node again. 
+
+backig up and restoring ETCD cluster data:
+ETCD is backed data storage solution as such all K8s objects, apps and configurations are stored in etcd. so likely to backup cluster data by backing up etcd.
+ETCDCTL_API=3 ectdctl --entpoints $ENDPOINT snapshot save <file-name>
+ETCDCTL_API=3 etcdctl snapshot restore <file-name>    --> you need to supply additional parametrs as restore operation creates a new logical cluster.
+
+K8s object management:
+you can use the kubectl to deploy applications, inspect and manage cluster resources and view logs. 
+kubectl get <object type> objectname -o <output-yaml/json/wide> --sort-by <JSONPath> --selector <label>
+kubectl create -f <filename>   --- if we try to create object already exist an error will occur.
+kubctl apply -f <filename>     ---same as create but if we apply on already existed object then it will modify.
+kubectl delete <object type> ojbect-name
+kubectl exec <pod-name> -c <container-name> -- <command>   -->used to run commands inside container.if pod has multiple conainers then specifiy container with -c otherwise optional.
+
+kubectl declarative commands --> define object using the data structure like yaml/json. kubectl apply -f <filename>
+kubectl imperative commands --> define objects using kubectl commands. kubectl create deployment my-deployment -- image=nginx --dry-run -o yaml. X create pods using it.
+kubectl scale deployment my-deployment replica=5 or --replica 5 --record     ---> record a command
+
+RBAC in K8s:It allows you to control what users are allowed to do and access within your cluster. example: we can use RABC to allow dev to read metadata and logs from
+K8s pods but not make any changes to them. 
+
+Cluster----------------------------------------    Roles and ClusterRoles are K8s objects that define a set of permissions. Role define permissons within perticuler
+|                                             |    namespace and cluster role defines a cluster wide permissions not specific to single namespace.
+|   Namespace---------     ClusterRole------  |
+|   |  Role          |    |  permissions   |  |
+|   |  permissions   |    |                |  |    RoleBinding and ClusterRoleBinding are objects that connect roles and cluster roles to users.
+|   |                |    |                |  |
+|   |______ ↑________|    |_______ ↑_______|  |
+|                                             |
+|     RoleBinding         ClusterRoleBindding |
+____________ ↑______________________ ↑________|           
+                     ↑
+             Users/ServiceAccounts
+
+K8s Service Account: In K8s, Service account is an account used by container processes within pods to authenticate with K8s API.if your pods needs to communicate with 
+K8s API then you can use service accounts to control their access. A service account object can be created with some YAML just like other K8s object.
+apiVersion: v1
+kind: ServiceAccount
+metadata: 
+ name: my-serviceaccount
+
+you can manage access control for service accounts just like any other user, using RABC objects. 
+
+Inspecting pod resource usage: 
+Kubernates metrics server: In order to view metrics about the resources, pods and containers are using, we need an add-on to collect and provide that data. One such 
+add-on is kubernates metrics server. Once we installed that add-on we can use top command to view data about resource usage in pods and nodes.  
+kubectl top pod --sort-by <JSONpath> --selector <label>
+
+
+Pods and Containers:
+1. managing application configuration: When you are running appls in K8s, you may pass dynamic values to apps at runtime to control how they behave known as Apps Confign.
+   ConfigMaps --> you can store configuration data in K8s using cm. configMaps store data in the form of key-value map. cm data can be passed to container apps. 
+   Secrets --> similar to configMaps but are designed to store sensitive data such as passwords or API keys. create and used similar to cm. 
+   Environment variable --> you can pass cm and secrets as env variables. These variables will be visible to container process at runtime. 
+   ConfigurationVolumes --> cm and secret data passed to container in the form of mounted volumes. 
+
+2. managing container resources: 
+   Resource requests -->  allows you to define an amt of resources(cpu or memory) you expect a comtainer to use. K8s scheduler will use resource requests to avoid 
+   scheduling pods on nodes that do not have enough resources. Note: scheduler wil not spin up pods unless have enough resources beforehand. 
+   Resource Limits --> provide a way fr you to limit resources container can use. Container runtime is responsible to enforce resource limits.
+
+3. Building self healing pods with restart policy:  K8s automatically restart containers when they fail or problem arises. 
+   Always  --> default restart policy in K8s. containers always be restarted if they stop, or completed successfully
+   On-Failure --> Will restart container only if container process exits with error code or containr detect to be unhealthy by livenes probe. X after successfully completed. 
+   Never  --> always cause the pods container to never be restarted. even if container exits or liveness probe fails. 
+
+4. Multi-container pods: K8s pods can have >1 containers called multi-container pods. In M-C pods containers share resources such as network(can communicate 
+with another container on any port even if port X exposed to cluster) and storage.They can interact with one another, working together to provide functionality. 
+Note: Its best practice to keep containers in separate pods unless they to share resources. 
+   
+5. Init container: are containers that run once during the startup process of pods. Pod can have any number of init containers and they will each run once (in order) to completion. 
+you can use init containers to do variety of startup tasks. They are often useful in keeping main containers lighter and more secure by offloading startup tasks to separate container. 
+
+
+Advanced pod allocation: 
+K8s scheduling --> The process of assigning pods to nodes so kubelets can run them. K8s scheduler selects a suitable node for each pod and it takes following into account,
+1. resource req vs available node resources
+2. Various configuration that affect scheduling using node labels. + you can configure nodeSelector for your pods to limit which node the pod can be scheduled on +
+you can also use nodeName to assign specific pod to node directly and bypass scheduling.
+kubectl label nodes <nodename> special=true   ---> assigning special=true label to node
+
+DaemonSet --> Automatically runs a copy of pod on each node. DaemonSet will run copy of pod on new node when they are added to the cluster. DaemonSet normally respect 
+scheduling rules around nodeLabels, taints and tolerations. If pod would not normally schedule on node, daemonSet will not create copy of pod on that node.
+
+Static pod --> A pod directly managed by kubelet on the node ( created in menifest location on worker node)  but not by K8s API server. They can run even if there is not any K8s API server. 
+Kubelets automatically creates static pods from YAML menifest files on worker node. 
+Mirror pod ---> Kubelet will create a mirror pod  for each static pod. Mirror pod allow you to see the status of Static pods via K8s API , but you cannot change 
+or manage them via API server. 
+
+
+K8s Deployments: K8s object that defines a desired state for replicaSet(A set of replica pods). Deployment controller seeks to maintain desired state creating,
+deleting,  and replacing pods with new configurations. desired state includes,
+1. replica: No. of replica pods deployment seek to maintain
+2. Selector: used to identify replica pods managed by the deployment.
+3. Template: temmplate pod defination used to create replica pods. 
+
+scaling deployment: 
+1. edit YAML: 
+...
+spec
+ replica: 5
+...
+2. kubectl scale
+kubectl scale deployment.v1.apps/my-deployment --replicas=5
+
+Rolling update: allows yout o make changes to deployment pods at controlled rate, gradually replacing old pods with new one. This allows you to update your pods without incussing 
+downtime. 
+kubectl rollout status deployment.v1.apps/my-deployment  --> to see how rolling update is happening
+kubectl set image deployment/my-deployment nginx=<version> --record      ----> command for rolling update
+Rollback: If an update to the deployent cause a problem , yoyu can roll back the deployment to the previous working state. 
+
+
+Kubernates network Model: Is set of standards that define how networking between pods behaves. There are variety of implementations of this model inlcuding 
+calico network plugin.
+Each pod has its unique IP address in cluster. Any pod can reach out other pod using pod's IP address. This creates a Vurtual network that allows Pods to easily 
+communicate with each other, regardless of which node they are running. 
+
+DNS in K8s:
+K8s virtual network uses DNS to allow pods to locate other pods and services using domain name instead of IP address. 
+This DNS runs as a service within cluster. you can easily find it in kube-system namespace. 
+pod-domain-names --> all pods in K8s cluster get following domain name form
+pod-ip-address.namespace-name.pod.cluster.local         ---> 192.172.17.10.default.pod.cluster.local
+
+Network policies: K8s network policy is a object that allows to control the flow of network communication to and from pods. This allows you to build more secure cluster
+network by keeping pods isolated from traffic they do not need.
+podSelector: Determines to which pods in namespace network policy applies. podselector selects pods using pod labels. 
+Note: By default pods are considered non-isolated and completely open to all communication. If the network policy selects a pod, the pod is considered isolated 
+and will only be open to traffic allowed by network policies. 
+spec: 
+ podSelector: 
+  matchLabels: 
+    role: db 
+
+network policy can apply to Ingress, Egress or both. from and to selectors --> FromSelector selects ingress traffic that will be allowed
+to selector selctes egres traffic that will be allowed. 
+spec: 
+ ingress: 
+  - from: 
+    ...
+ egress:
+  - to: 
+    ...
+ 
+from and to selector rules applies to,
+1. podselector					2. namespaceSelector		                    3. ipBlock								
+select pods to allow traffic to/from             Select namespaces to allow traffic from/to        Select an IP range to allow traffic to/from
+spec:                                           spec:                                                spec: 
+ ingress:                                         ingress:                                             ingress: 
+ - from:                                          - from:                                              - from: 
+   - podSelector:                                   - namespaceSelector:                                 - ipBlock:
+       matchLabels:                                     matchLabels:                                        cird: 172.0.0.0/16
+        app: db                                           app: db
+    
+
+ports: Specifies one or more ports that will allow traffic 
+spec: 
+ ingress: 
+  - from: 
+    ports: 
+     - protocol: tcp
+       port: 80
+
+
+K8s Services: provides a way to expose an application running on set of pods. They provide an abstract way for clients to access applications without needing to be aware 
+of application pods. 
+                        pods (endpoints --> backend entity to which service routes traffic)
+client --> Service--->  pods (endpoints)     
+                        pods (endpoints)
+
+Each service has type and Service Type determines how and where the service will expose your application. There are 4 types,
+1. ClusterIP  --> expose service inside cluster network
+2. NodePort  --> expose service outside the cluster network. (should be between 30000-32767)
+3. LoadBalancer  --> also expose service outside of cluster network. But they use an external cloud load balancer to do so. works only with cloud platform.
+4. Headless service -> used for statefullsets where each pod is not identicle. set  ClusterIp=none to use headless service. so app pod can directly connect using pod ip address.
+
+apiVerison: v1				apiVerison: v1
+kind: service				kind: service
+metadata:				metadata:
+  name: service-type		          name: service-type
+spec: 					spec: 
+  type: clusterIP			type: nodePort
+  selector: 				selector:
+     apps: svc-exmaple         		  apps: svc-exmaple     
+  ports:                                ports: 
+  - protocol: TCP			- protocol: TCP
+    port: 80				  port: 80
+    targetPort: 80		          targetPort: 80
+                                          nodePort: 30080  	
+
+Service DNS names: K8s DNS assigns DNS names to services allowing applications within cluster to locate them easily.service FQDN has following form,
+service-name.namespace-name.svc.cluster-domain.example   --> default cluster domain is cluster.local
+note: service fqdn can be used to reach service from within any namespace in the cluster. However, pods within same namespace can also simply use servicename.
+
+managing access from outside world to K8s service: 
+Ingress is K8s object that manages external access to services in the cluster. An Ingress is capable of providing more functionality than a simple nodePort service, 
+such as SSL termination, advanced LoadBalancing, or Name based virtual Hosting. 
+external world --> Ingress --> service
+
+Ingress controller: Ingress objects do nothing by themselves. Ingress needs controller for providing extrnal access to your services. ex: nginx,traffic,haproxy etc
+Ingress defines a set of routing rules. each rule has set of paths with backend specified. 
+ingress controller evaluates rules + manages redirection and entrypoint to cluster
+apiVersion: networking.K8s.io/v1
+kind: Ingress
+metadata: 
+  name: my-ingress
+spec: 
+  rules: 
+  - http: 
+    paths: 
+    - path: /somepath
+      pathType: prefix
+      backend: 
+        service: 
+          name: my-service
+          port: 
+            number: 80
+            or
+            name: web (for namedPort service)
+
+
+K8s Storage: 
+The container FS is ephemeral. If container is deleted or re-created in K8s then data stored on container FS is lost. 
+Volumes: allow you to store data outside of container FS while allowing the container to access data at runtime. Volume offer simple way to 
+provide external storage to containers within pod spec. 
+syntax: 
+Volumes -> In Pod spec, they specify volume type, where and how the data is stored.
+volumeMounts -> In Container spec, refer to volumes in pod spec and prvide mount Path
+
+example: 
+apiVersion: v1
+kind: pod
+metadata: 
+  name: volume-pod
+spec: 
+ containers: 
+ - name: busybox
+   image: busubox
+   volumeMounts: 
+   - name: my-volume
+     mountPath: /output
+ - volume: 
+   - name: my-volume
+     hostPath: 
+      path: /data 
+      or 
+      emptyDir: {}
+
+Note: We can also use mountVolumes to mount same volume on multiple containers. 
+Common Volume Types: 
+1. hostPath: stores data in specified directory on K8s node.
+2. emptyDir: Stores data on dynamically created loc on K8s node. This dir exists as long as pod exist on node. vry useful to share data between containers. 
+
+Persistent volume--> are slightly more advanced form of volume. they allow you to treat storage as abstract resource and consume it 
+using pods. 
+apiVersion: v1
+kind: persistentVolume
+metadata: 
+  name: my-pv
+spec: 
+  storageClassName: localdisk
+  persistentVolumeReclaimPolicy: recycle        --> determines how the storage rsrc can be reused when pv claims deleted. 
+  capacity: 
+    storage: 1Gi
+  accessModes: 
+    - ReadWriteOnce
+  hostpath: 
+    path: /var/output
+
+pods --> PersistentVolume Claim --> persistent Volume --> External Storage
+various volume types support storage method: NFS, cloud storage, configMaps, secrets, simple dir on K8s node etc
+persistentVolumeReclaimPolicy types: 
+Retain --> keeps all data. admin to manually cleanup data and prepare for storage reusage. 
+delete --> delete underlying storage (only works with cloud storage)
+recycle --> automatically deletes all data and allowing pv to be reused. 
+
+StorageClass --> administrator can create storagecalss called slow to describe low performance but inexpensive storage and another called fast for high performance
+and costly resource. 
+apiversion: v1
+kind: storageClass
+metadata: 
+  name: slow or fast
+provisioner: kubernates.io/no-provisioner
+allowVolumeExpansion: true              --> if not set to true attempting to resize volume throws error. 
+
+PersistentVolumeClaim -> Represents a users req for storage resource. when pvc is created it look for pv. 
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: 
+ name: my-pvc
+spec: 
+ storageClassName: localdisk
+ accessModes: 
+ - ReadWriteOnce
+ resources: 
+   requests: 
+     storage: 100Mi
+
+
+apiVersion: v1
+kind: pod
+metadata: 
+  name: volume-pod
+spec: 
+ containers: 
+ - name: busybox
+   image: busubox
+   volumeMounts: 
+   - name: my-volume
+     mountPath: /output
+ - volume: 
+   - name: my-volume
+     persistentVolumeClaim:
+       claimName: my-pvc
+
