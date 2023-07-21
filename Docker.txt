@@ -1,0 +1,394 @@
+Docker is an opensource containerization platform for developing, shipping and running application.
+Its is designed to solve problem statement of "it works on my machine" i.e code portability.
+its client side pgm
+act as service
+social networking platform
+
+container: Is a standerd unit of software that packages up code, all its dependancies, config, processes, networking, 
+os(some chunks) so the application runs quickly and relaibly from one platform to another. 
+portable artifcat, easily shared and moved around.
+
+Docker-client
+    |
+docker-daemon
+    | 
+local image storage    <------------> DockerHub
+
+
+Virtual machine 			vs 				Docker
+
+app     | app    |app    |                                        |app       |app    |app    |
+config  |config  |config |                                        |config    |config |config |
+guest OS|Guest OS|gues OS|                                        |bin/lib   |contnr2|contnr3|
+----------------------------                                      ---------------------------------
+        Hypervisor                                                  Docker Engine layer (mainly Linux)
+----------------------------                                      -----------------------------------
+      Operating system 							 Operating system
+---------------------------                                       ------------------------------------
+        Hardware                                                            Hardware
+---------------------------                                       -----------------------------------
+1. heavy weight i.e creates standalone                            1. light weight i.e it bundles application dependacies
+os on top of os                                                    and use some chunks of kernal to interact with underlying os
+2. resource hungry						  2. Not a resource hungry
+3. starts and run slow 						  3. Starts and run much fast 
+
+Running a container:
+Busybox - very small, light weight layer of linux
+outside world of container does not know whats happening inside container unless explicitely defined. 
+container is very very separate thing. 
+
+Syntax: docker run [option] IMAGE:[TAG] [CMD] [ARG]
+ex: docker run busybox echo hello world
+
+[OPTION]
+-it -> gateway to interact with container. 
+-i -> interactive
+-t -> tty to give formattable terminal
+-d -> detached mode that is to run container at background
+--name -> name the container
+--restart -> specify when container should restart automatically [values: no, on-failure, always, unless-stopped]
+-p <host port>:<container port> -> expose conatiners port by mapping it to host port. (can use multiple times)
+--rm -> automatically remove conatiner when it exits. cannot be used with --restart
+--memory -> provide hard limit for container
+--memory-reservation -> soft limit, used when exceeds hard limit
+docker ps --all -> shows all container
+
+ctl + d to exit container
+docker start/stop/kill/rm imageid or containername
+stop -> allows container to finish its task and stop
+kill -> tells container to exit no matter what
+rm - before rm container, it must be stopped 
+
+run -> create and start container
+exec -> execute command in running container
+
+
+Upgrading docker engine:
+1. install higher version docker
+sudo yum install docker-ce=<verson> docker-ce-cli=<version>
+downgrading docker:
+1. stop docker service
+2. uninstall docker-ce and docker-ce-cli
+3. install lower docker version 
+4. start docker service
+
+
+Namespaces: linux feature that allows processes to be isolated in terms of resources they see and also used to prevent
+diff processes from interacting with one another. docker uses namespaces to isolate conatainers. it allows the containers to work
+independently and securely
+docker uses following namespaces to isolate rsrsces for containers:
+pid,net,ipc,mnt,uts <kernal and version identfier>
+
+Docker images:
+Docker image is a immutable file containing the code and components needed to run soft in container. 
+Container and images use layered file system. and each layer contains only the diff from previous layer.
+image consist of one or more read only layers while container adds one additional writable layer.
+
+         ----------------------------------
+         |writable container layer         |
+  ------------------------------           |
+         |   web app           |           |
+  image  |   python            |  conatiner|
+         |   base os           |           |
+  ------------------------------------------
+Layered fs allows multiple images and containers to share same layers results in
+1. smaller storage footprints
+2. faster image build
+3. faster image transfer
+
+docker image pull IMAGE:[TAG]        -> download docker images
+docker image history IMAGE         -> list the layers used to build image
+docker image ls                    -> list the images
+docker images inspect IMAGE         --> get detailed info about image
+docker image rm IMAGE or docker image rmi IMAGE    -> remove image
+docker image rm -f IMAGE   -> remove all tags and delete image. Note -> If we delete image which is being referrenced by running 
+container then it will delete tag but not actual image turning into dangling image 
+(which has no container + tag refer but consume space on system)
+
+Image cleanup: 
+docker system df   --> get info about disk usage on system
+docker system df -v --> detailed info
+docker image prune   -> to delete dangling images (images with no referrnce to tags or containers)
+docker image prune -a --> remove all unused images (not used by container)
+
+
+
+Dockerfiles: helps to create our own images. Dockerfile is a set of instructions which are used to construct an image.
+these instructions are called directives.
+FROM  -> sets base image + must be first dir in file
+ARG  -> temp variable used while building an image
+ENV  ->  set env variables which is used at runtime. use -e option to override it while launging container.
+WORKDIR  -> set current working dir for subsequet directives ADD, COPY, CMD, ENTRYPOINT etc + can use multiple times
+RUN  -> commands to be executed while building image.
+COPY ->  copy file from machine to image
+ADD -> similar to COPY but also pull files using URL and extract archive into loose file in images
+EXPOSE -> port to be published 
+CMD  -> specify default cmd used to run at container at execution time. It can be overriden at run time. can have multiple CMD but only last is referred. 
+ENTRYPOINT --> same as CMD. However, it cannot be overriden. CMD just pass a parameter to an entrypoint. 
+STOPSIGNAL -> specify singal that will use to stop container
+HEALTHCHECK --> specify cmd to check container health
+
+ex: build python-flask docker image
+FROM: python:3
+WORKDIR /app
+COPY . .
+RUN pip install -r requirement.txt
+EXPOSE 3000
+CMD python ./index.py
+
+docker build -t TAG .   <-t tag and . is dir where dockerfile resides>
+docker run IMAGE
+
+Building efficient docker images:
+general tips:
+1. Put things that are unlikely to change on lower-level layers so to use caching
+2. Dont create unnecessary layers
+3. Avoid including any unnecessary files, packages in images
+
+Multi-Stage builds  -> Have >1 FROM directive in dockerfile and each FROM directive starts new stage.
+each stage begins completely new set of FS layer, allowing you to selectively copy only files that you need from previous layer.
+using --from flag to copy files from previous layer.
+
+ex: COPY --from=0 ...
+or
+FROM <base-image> AS stage1
+---
+FROM <base-image> AS stage2
+COPY --from=stage1 ...
+ 
+
+Flattening an Image: sometimes image with few layers perform better and in few cases, you may want to take an image with many 
+layers and flatten them into single layer.
+1. run a container from image
+docker run -d --name flat_container noflat
+2. export runnig container(step1) to an archive using docker export
+docker export flat_container > flat.tar
+3. import an archive as image using docker import
+cat flat.tar | docker import - flat:latest
+
+
+
+Docker Swarm: feature of docker, which allows you to build distributed cluster of docker machines to run containers.
+it facilitates orchestration, high availability and scaling. 
+
+docker Swarm		 vs			Kubernates
+1. easy installation 				complex installation process
+2. manual scaling				supports auto-scaling
+3. auto load-balancing				setup manual load-balancer
+4. supports third party monitoring tools	Built in monitoring 
+5. Integrates docker CLI			need for separate CLI (kubectl)
+
+configuring swarm manager:
+1. install docker-ce on swarm manager machine
+2. initialize docker swarm with <docker swarm init --advertise-addr private-ip>
+3. check <docker info>
+4. list current nodes in docker swarm <docker node ls>
+
+configure swarm nodes:
+1. install docker-ce on worker node
+2. get join command from swarm manager
+--> run <docker swarm join-token worker> on manager to get join command
+3. run join command on worker nodes provided in step 2
+4. verify worker node joined manager or not with <docker node ls> on manager node
+ 
+Backup and restore docker swarm:
+1. stop docker service
+2. take backup of /var/lib/docker/swarm dir
+3. start service
+
+Docker Orchestration: 
+Lock and Unlock swarm cluster: 
+docker swarm encrypts sensitive data for security reason (logs on swarm manager + TLS communication btween swarm nodes) 
+swarm manages the keys(unenrypted) used for above encryption so Autolock is the feature which locks the swarm.
+this gives greater control of keys and can allow greater security. However, it require to unlock swarm every time swarm manager restarts.
+<docker swarm unlock>
+docker swarm unlock-key   -> if forget key
+docker swarm unlock-key --rotate
+
+Enable and disable Autolock:
+docker swarm update --autolock=true
+docker swarm update --autolock=false
+
+High availability in swarm cluster:
+Multiple managers  -> good to have to maintain high availability and fault tolerent swarm. Docker uses Raft consensus algo
+to maintain consistent cluster state across multiple managers.
+Quorum -> is majority(>half) of managers in swarm. It must be maintained to make changes in swarm cluster state.
+Docker recc that you distribute your manager nodes across at least 3 AZ.
+
+Services:
+A service is used to run an application on Docker swarm. A service specifies a set of one or more replica tasks. 
+These tasks will be auto distributed across nodes in cluster and exec as containers.
+
+Docker service create [OPTIONS] IMAGE ARG
+ex:  docker service create --name nginx --replica 3 -p 8080:80
+--replica   -> number of replica tasks to create for service.
+--name     --> name of the service
+-p PUBLISHED_PORT:SERVICE_PORT   --> publish a port so that service can be accessed externally
+
+Templates can be used to give dynamic values to some flags with docker service create
+--hostname
+--mount
+--env
+ex: docker service create -env NODE_HOSTNAME="{{.Node.Hostname}}" --replica=3 nginx
+
+docker service ls     -> list current services
+docker service ps SERVICE   -> list service tasks
+docker service inspect SERVICE   --> get more info about service
+docker service update [OPTION] SERVICE   --> make changes to service
+docker service rm SERVICE --> delet an existing service
+
+replicated     vs    Global services
+replicated services will run req number of replica tasks across swarm cluster.
+ex: docker service create --name webserver --replica 3 nginx
+global service will run one task on each node.
+ex: docker service create --mode global nginx
+
+scaling services: there are 2 ways to scale services
+1. using docker service update
+ex: docker service update --replica <PELICAS> SERVICE --> docker service update --replica 2 nginx
+2. using docker service scale
+ex: docker service scale SERVICE=REPLICAS   --> docker service scale nginx=2
+
+Node Labels: 
+You can add peices of metadata to your swarm nodes using node labels. Then you can use labels to determine which nodes
+tasks will run on. 
+Syntax: docker node update --label-add LABEL=VALUE NODE       --> add label to nodes
+docker node update --label-add availability_zone=east node1
+docker node update --label-add availability_zone=west node2
+
+Node constraints: To run services tasks only on nodes with specific label value use --contraint flag with docker service create
+ex: docker service create --contraint node.labels.LABEL=VALUE IMAGE
+docker service create --constraint node.labels.availability_zone=east nginx   or
+docker service create --constraint node.labels.availability_zone!=east nginx 
+
+Placement-pref: use --placement-pref with the spread strategy to spread tasks evenly across all values of perticular label.
+docker service create --placement-pref spread=node.labels.LABEL IMAGE
+ex: docker service create --placement-pref spread=node.labels.availability_zone nginx
+
+
+
+Docker compose: (containers created though docker compose shares the same network)
+Tool that allows you to run multi-container application defined using declarative format in single node(YAML file).
+Note:compose does not use swarm mode to deploy services to multiple nodes in swarm. To deploy apps across swarm use
+"docker stack deploy"
+define docker-compose project:
+1. make dir to contain your docker-compose proj
+2. change to proj dir
+3. add docker-compose.yaml to dir
+4. define apps using docker.compose.yaml
+ex: 
+version: '3'
+services: 
+   web: 
+     image: nginx
+     port: 
+     - '8080:80'
+   redis: 
+     image: redis:alpine
+
+version: '3'
+services:
+  mongodb: 
+    image: mongo
+    ports: 
+     - "27017:27017"
+    environment:
+     - USERNAME: admin
+     - PASS: password
+    volumes: 
+     mymongo-data: /data/db
+  mongo-express:
+    image: mongo-express
+    ports: 
+     - "27017:27017"
+    environment:
+     - USERNAME: admin  
+     - PASS: password
+     - mongo-server: mongodb
+Volumes: 
+  mymongo-data: 
+     driver: local 
+
+docker-compose up -f <filename>
+docker-compose down -f <filename>
+
+---create and run resources
+docker-compose up -d 
+docker-compose ps    --> list containers/services running under docker-compose
+docker-compose down   --> stop and remove all resources
+
+Docker stack:
+A Stack is a collection of interrelated services that can be deployed and scaled as unit. docker stack are similar to the 
+multi container apps created using docker-compose. However they can be scaled and executed across swarm cluster.
+docker stack deploy -c COMPOSE_FILE STACKNAME    --> Deploy stack to swarm cluster using compose file
+docker stack ls			--> list current stacks
+dockr stack ps STACKNAME     --> list the tasks associated with stack
+docker stack services STACKNAME   --> list services associated with stack
+docker stack rm STACKNAME   -> delete stack
+
+
+Storage and Volumes:
+Storage drivers(Graph drivers):
+provides framework for managing the temp, internal storage of containers writable layer. supports variety of storage drivers
+1. Overlay2 - File based storage. default for ubantu and CentOs 8+ + efficient for reads
+2. devicemapper - block storage + efficient for lot of writes + default for centOS7-
+supports 2 modes: 
+		1. loop_lvm mode: simulates an additional physical disk using files on local disk + X requied add storage device
++ bad performance + only used for testing.
+		2. direct_lvm mode: req an add device + good performance + used for prod
+3. aufs - file storage
+
+docker info  ---> shows which storage driver used
+Note: Docker automatically select SD based on env + can override with below option
+1. set --storage-driver flag while docker start
+2. set 'storage-driver' value in /etc/docker/daemon.json 
+
+docker storage consist of layers + you can find location of layered data using ---docker container inspect <conatinrid>---
+
+docker volume: when mounting an external storage to container, use either bind mount or volume
+1. Bind mounts:
+---mount specific path on host machine to container. 
+---not portable 
+---depend on host machines FS and dir structure 
+2. Volume: 
+---storage data on host FS + but storage location is managed by docker.
+---More portable 
+---can mount same volume to multiple containers.
+
+syntax: docker run --mount [key=value] ...
+type = bind, volume,tmpfs
+source/src=volume name or bind mount path
+destination/dst/target=path to mount inside container
+echo Hello,World -> messege/message.txt
+ex: docker run --mount type=bind,src=/home/cloud_user/message,dst=/root,readonly busybox cat /root/message.txt
+docker run --mount type=volume,src=my-volume,dst=/root busybox sh -c 'echo Hello > /root/message.txt && cat /root/message.txt'
+
+-v syntax: docker run -v SOURCE:DESTINATION:[OPTIONS]
+SOURCE: if this is volume name it will create volume + if this is path then it will create bind mount.
+DESTINATION: location to mount the data inside container
+OPTIONS: comma separated list of cmnds like ro for readonly 
+ex: docker run -v /home/cloud_user/message:/root:ro busybox cat /root/message.txt
+docker run -v my-volume:/root busybox cat /root/mesage.txt
+
+mount same volume to multiple container:
+docker run --name container1 --mount src=shared-volume ...
+docker run --name container2 --mount src=shared-volume ...
+
+manage volumes: 
+docker volume create VOLUME_NAME
+docker volume ls 
+docker volume inspect VOLUME_NAME
+doker volume rm VOLUME_NAME
+
+Docker Networking:
+
+
+Docker best practices:
+1. Use the docker official images as base image
+2. Use Specific base image version (Latest images are tent to be unstable)
+3. Use small-sized official images  
+4. Optimize the caching image layer (order docker directives to use caching)
+5. use .dockerignore to exlude files and folders. 
+6. make use of multi-stage builds (for smaller size of images)
+7. Use least pivelaged user.   (docker has root permision which can lead to exploitation of app hosted inside container)
+8. Scan images for vulnerabilities. 
