@@ -1,0 +1,18 @@
+git add  --> add to staging area
+git commit -m "--" --> add to local repo
+git init  --> used to initialize the project. .git folder contains the staging(blob object) and local repo(commit and tree object) for versioning. 
+git config --local(specific to project) or --global(all projects) user.name ""
+git config --local(specific to project) or --global(all projects) user.email ""   --> to configure git credentials. credentials stored in .git/config file
+
+chached/indexed/staged  --> means same. files are tracked for versioning at staging area.
+git rm --cached */specific file 	--> unstage file
+git status	--> to check file tracking status
+
+git rm file --> removes file from local and staging area
+git log master	--> check git commands history
+
+git cat-file -p <commit-hash> 	--> it will show you blob objects 
+
+git switch <commit hash to revert to>	--> revert changes to previous commit. rollback changes but not recommended option
+
+
