@@ -96,6 +96,14 @@ Layered fs allows multiple images and containers to share same layers results in
 2. faster image build
 3. faster image transfer
 
+docker [management cmd] [sub-cmd]
+docker info		--> provides docker info
+docker image --help	--> shows all cmmands used with image
+docker login -u <username> <url>		--> if you push/pull from private repo
+
+Note: docker pull has max 200 request per 6 hours. 
+
+docker search <imagename>		--> search available images in dockerhub
 docker image pull IMAGE:[TAG]        -> download docker images
 docker image history IMAGE         -> list the layers used to build image
 docker image ls                    -> list the images
@@ -108,10 +116,40 @@ container then it will delete tag but not actual image turning into dangling ima
 Image cleanup: 
 docker system df   --> get info about disk usage on system
 docker system df -v --> detailed info
+docker sytem prune 	--> delete images/containers/volumes not used
 docker image prune   -> to delete dangling images (images with no referrnce to tags or containers)
 docker image prune -a --> remove all unused images (not used by container)
+docker image save <image name> > or -o tarname.tar		--> when you dont have private or public repo and want to share image to other teams. 
+
+docker load < imagename.tar	--> to load image tar
+
+Note: dockerhub credentails are stored under /root/.docker/config.json	--> auth: base64 encoded value for username and password. you can decode using 
+echo "encoded value" | base64 -d	--> it will show credentail.
+auth will be empty once you are exited from docker. 
 
 
+------Docker container commands------
+docker ps -a 		--> shows all containers
+docker container rm <ID>		--> remove container. can't remove running container use -f if want
+docker run -d --name=<namee> <image name>	--> create and start container in detached mode with cntainer name
+docker log -f <container id>			--> check runtime logs like tail in linux. -f: follow
+docker rm -f ${docker ps -aq}			--> remove exited containers forcefully
+
+Note: container goes into exited state when container fails/completes or container asking for something which we are not giving. 
+docker run -it ubantu			--> start ubantu and provide interactive mode(STD_IN terminal) with -i and tty terminal with -t (STD_OUT terminal)
+ctr+pq		--> to come out of container without exit
+
+docker exec container_ID command		--> execute the command inside running container. 
+
+docker stop: gracefully(grace period is 10sec) shutdown container by sending SIGTERM signal to the main process running inside container. 
+docker kill: immediately stops or kills container by sending SIGKILL signal to main process. no grace period like docker stop. 
+
+docker top <container name>		--> get pid of container. you can kill it from host machine too. 
+docker container inspect		--> get info about container (IP,port,cmd etc)
+
+doker run -d -p 90:80 --name=web nginx	--> port mapping frm host to container.
+docker commit <container_ID> <new name of image>		--> create new image out of running container. 
+docker attach container_id		--> run container in foreground mode
 
 Dockerfiles: helps to create our own images. Dockerfile is a set of instructions which are used to construct an image.
 these instructions are called directives.
@@ -327,7 +365,9 @@ docker stack services STACKNAME   --> list services associated with stack
 docker stack rm STACKNAME   -> delete stack
 
 
-Storage and Volumes:
+Storage and Volumes: (/var/lib/docker/volumes)
+image consist of read only layers and when we start container writable layer gets added. writable layer gets deleted when container deleted. To persist changes made in writable layer use Storage and volumes
+
 Storage drivers(Graph drivers):
 provides framework for managing the temp, internal storage of containers writable layer. supports variety of storage drivers
 1. Overlay2 - File based storage. default for ubantu and CentOs 8+ + efficient for reads
@@ -347,16 +387,16 @@ docker storage consist of layers + you can find location of layered data using -
 
 docker volume: when mounting an external storage to container, use either bind mount or volume
 1. Bind mounts:
----mount specific path on host machine to container. 
+---mount specific path(with /,$PWD,./) anywhere on host machine to container. 
 ---not portable 
 ---depend on host machines FS and dir structure 
-2. Volume: 
+2. Named mounts (Volume): 
 ---storage data on host FS + but storage location is managed by docker.
 ---More portable 
 ---can mount same volume to multiple containers.
 
 syntax: docker run --mount [key=value] ...
-type = bind, volume,tmpfs
+type = bind, volume,tmpfs					
 source/src=volume name or bind mount path
 destination/dst/target=path to mount inside container
 echo Hello,World -> messege/message.txt
@@ -367,21 +407,71 @@ docker run --mount type=volume,src=my-volume,dst=/root busybox sh -c 'echo Hello
 SOURCE: if this is volume name it will create volume + if this is path then it will create bind mount.
 DESTINATION: location to mount the data inside container
 OPTIONS: comma separated list of cmnds like ro for readonly 
-ex: docker run -v /home/cloud_user/message:/root:ro busybox cat /root/message.txt
-docker run -v my-volume:/root busybox cat /root/mesage.txt
+ex: docker volume create my-volume
+docker run -v /home/cloud_user/message:/root:ro busybox cat /root/message.txt		--> create read only mount when multiple containers using it.  
+docker run -v my-volume:/root busybox cat /root/mesage.txt				--> my-volume mount point created under docker-home/volume/ dir
 
 mount same volume to multiple container:
 docker run --name container1 --mount src=shared-volume ...
 docker run --name container2 --mount src=shared-volume ...
+or
+docker run --name container2 --volumes-from container1 <image>
 
 manage volumes: 
 docker volume create VOLUME_NAME
 docker volume ls 
 docker volume inspect VOLUME_NAME
 doker volume rm VOLUME_NAME
+docker volume prune				--> volume without data. 
 
-Docker Networking:
+-----setting env variables for container----
+docker run --rm -e NAME=DEVOPS nginx:latest env		--> shows env variables from nginx container
+docker run --rm --env-file envfile.txt	nginx:latest env		--> if want to set multiple env variables then use env file. 
 
+------------------Docker Networking: (main purpose is to have an isolation)----------------
+Bridge network: joins two separate computer networks. works at layer2(ethernet) of OSI model
+Docker creates 3 networks when installed: bridge,none and host. when you start docker, default bridge network (docker01) creates automatically and all newly started containers connect to it unless speficied 
+
+Note: docker containers never talk to eac other on IP address rather docker has enbedded DNS(127.0.0.11) which used by containers to connect each other(custom network). not applicable for default networks. 
+IP address consist of 4 octets 
+ex: 172.17.0.0/16	--> here 172.17 is network subnet and 2^16 are devices. 
+  n/w part|host part
+containers on the default bridge network can only access other container through IP address. as default bridge network does not have DNS resolver. 
+
+	container1		container2		container3
+	eth0			eth1			eth2
+	 ↓			 ↓			 ↓
+	 ↓______________________ ↓______________________ ↓
+        | veth			veth			veth|
+	|  ↓^                     ↓^                     ↓  |
+	|  -------------------docker01-----------------^    |						--> default bridge network
+	|_________________________↓_________________________|
+				  ↓ (use NAT to convert container private IP to host public IP)
+				Eth0 (Host interface)   --> to connect to outside world
+brtcl show				--> shows virtual eth assigned by docker01 to avail containers 
+
+ex: docker network create my_net				--> creates custom bridge network. 
+    docker run -d --net my_net nginx:latest --name c1
+    docker run -d --net my_net nginx:latest --name c2
+    docker exec c1 ping c2		---> will work here as containers are connected to custom network having embedded dns. 
+
+docker network connect bridge c1			--> we are connecting c1 to default network. we can connect to multiple networks. 
+docker network disconnect bridge c1
+
+Note:
+		n1 (network)			n2
+ 	---------------			 -------------------
+        | c1n1   c2n1 | --> containers	 | c1n2    c2n2    |
+        ---------------                  -------------------
+Here if c1n1 wants to connect to c1n2 then we should connect 1. n2 to c1n1 or n1 to c1n2  2. create new network n3 and attach c1n1 and c1n2 to n3
+
+Host network: container uses host IP and port number. we cannot have multiple containers running with same port.
+pros: network performance (low latency required then) + easy network troubleshoot + legacy system need host configuration 
+cons: container ports are exposed to host directly causing sec vul + removes network isolation can be security risk
+ex: docker run -d --name c1 --net host nginx: latest
+
+none network: containers will only have local loopback address. cotainers kept in total isolation. when want to disable networking functionality for specific container. 
+ex: docker run -d --name c1 --net none ngnix: latest
 
 Docker best practices:
 1. Use the docker official images as base image
