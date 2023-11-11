@@ -152,29 +152,54 @@ docker commit <container_ID> <new name of image>		--> create new image out of ru
 docker attach container_id		--> run container in foreground mode
 
 Dockerfiles: helps to create our own images. Dockerfile is a set of instructions which are used to construct an image.
+(base image,default command,application(.war/ear file),dependancies (runtime)). 
+Note: 99% dockerfile starts with FROM, but only ARG can come before FROM in some cases. always use alpine or slim version of base image to resuce image size. 
+Google distroless images(find in gcr.io repo)  are speciliazed container images with only apps and its dependancies without any unnecessary extras like pckg manager or shell. docker always looks for Dockerfile to build however if you have diff name then use -f docerfilename
+
 these instructions are called directives.
 FROM  -> sets base image + must be first dir in file
-ARG  -> temp variable used while building an image
-ENV  ->  set env variables which is used at runtime. use -e option to override it while launging container.
-WORKDIR  -> set current working dir for subsequet directives ADD, COPY, CMD, ENTRYPOINT etc + can use multiple times
-RUN  -> commands to be executed while building image.
-COPY ->  copy file from machine to image
+LABEL -> defines author name or email address
+ARG  -> temp variable used while building an image. 
+ENV  ->  set env variables which is used at runtime(container). use -e option to override it while launging container.
+WORKDIR  -> set current working dir for subsequet directives ADD, COPY, CMD, ENTRYPOINT etc + can use multiple times. (create + cd)
+RUN  -> commands to be executed while building image.[inside image]
+run commands has 2 forms 1.shell form(creates shell and excutes cmd)	2. executable form (executes binary directly) 
+ex: 
+1. RUN echo "hello world"
+2. RUN ["/bin/echo","hello world"]
+each RUN command adds a layer in image so its bad practice to use multiple RUN to execute muliple commands rather use / to separate shell commands in single run. 
+ex: RUN echo "Hello World" && \
+        apt-get update && \
+        apt-get install utils -y
+
+COPY ->  copy file from host to image
 ADD -> similar to COPY but also pull files using URL and extract archive into loose file in images
-EXPOSE -> port to be published 
-CMD  -> specify default cmd used to run at container at execution time. It can be overriden at run time. can have multiple CMD but only last is referred. 
-ENTRYPOINT --> same as CMD. However, it cannot be overriden. CMD just pass a parameter to an entrypoint. 
+EXPOSE -> port to be published. port number must be of application. EXPOSE is just for documentation, it will open the port in container. 
+VOLUME -> user persistent volume from host machine in containers. used for configuration files not for main files which apps need
+CMD  -> sets default commands and/or parameters which can be overridden when the container is run. can have multiple CMD but last one referred. 
+ENTRYPOINT --> specifies the main command that will be executed when the container starts. CMD just pass a argument/parameter to an entrypoint. 
+ENTRYPOINT + CMD if given both in dockerfile. use --entrypoint=<cmd> to replace entrypoint. only single entrypoint allowed. 
+
 STOPSIGNAL -> specify singal that will use to stop container
-HEALTHCHECK --> specify cmd to check container health
+HEALTHCHECK --> specify cmd to check container health. health checks are executed periodically by docker itself. if returns 200 then exit status 0 if app crash then exit status 1
+ex: HEALTHCHECK CMD curl --fail http://<url> or Heath entrypoint || exit 1
+
+most common: FROM,WORKDIR,COPY,RUN,CMD,ENTRYPOINT
+
+docker context: current dir contents like dockerfile,necessary files sent to docker daemon to build image. The first thing build process does is send the entire context(current woring dir contents) recursively to daemon as tarball. 
+
 
 ex: build python-flask docker image
-FROM: python:3
+ARG PYTHON_VERSION:3.8
+FROM: python:$PYTHON_VERSION
+LABEL author="Shantayya Swami"			--> key=value 
 WORKDIR /app
 COPY . .
 RUN pip install -r requirement.txt
 EXPOSE 3000
 CMD python ./index.py
 
-docker build -t TAG .   <-t tag and . is dir where dockerfile resides>
+docker build -t TAG .   <-t tag and . is dir where dockerfile resides> <--build-arg PYTHON_VERSION=latest if no value provided in dockerfile>
 docker run IMAGE
 
 Building efficient docker images:
@@ -427,6 +452,7 @@ docker volume prune				--> volume without data.
 -----setting env variables for container----
 docker run --rm -e NAME=DEVOPS nginx:latest env		--> shows env variables from nginx container
 docker run --rm --env-file envfile.txt	nginx:latest env		--> if want to set multiple env variables then use env file. 
+
 
 ------------------Docker Networking: (main purpose is to have an isolation)----------------
 Bridge network: joins two separate computer networks. works at layer2(ethernet) of OSI model
