@@ -319,6 +319,14 @@ scheduler: schedule container onto nodes based upon rules and filters
 Discovery service: helps swarm manager discover new nodes and fetch their details 
 store(key-value db): stores state of cluster. 
 
+overlay-network: Overay network spans across entire cluster allowing communication between containers across multiple nodes. (default for swarm)
+docker create network my_net --driver=overlay
+
+Note: following ports must be open for swam cluster to work
+TCP port 2377 for cluster management communicaton
+TCP and UDP port 7946 for communication among nodes
+UDP port of 4789 for overlay network traffic
+
 docker Swarm		 vs			Kubernates
 1. easy installation 				complex installation process
 2. manual scaling				supports auto-scaling
@@ -364,8 +372,7 @@ Quorum -> is majority(>half) of managers in swarm. It must be maintained to make
 Docker recc that you distribute your manager nodes across at least 3 AZ.
 
 Services:
-A service is used to run an application on Docker swarm. A service specifies a set of one or more replica tasks. 
-These tasks will be auto distributed across nodes in cluster and exec as containers.
+A service is the image for microservices like HTTP server,db server,any type of executable program that you wish to run in distributed env. A service specifies a set of one or more replica tasks. These tasks will be auto distributed across nodes in cluster and exec as containers.
 
 Docker service create [OPTIONS] IMAGE ARG
 ex:  docker service create --name nginx --replica 3 -p 8080:80
@@ -377,7 +384,8 @@ Templates can be used to give dynamic values to some flags with docker service c
 --hostname
 --mount
 --env
-ex: docker service create -env NODE_HOSTNAME="{{.Node.Hostname}}" --replica=3 nginx
+ex: docker service create -env NODE_HOSTNAME="{{.Node.Hostname}}" --replica=3 --name web nginx
+docker service create --contraint=node.role=manager --replica=3 --name web nginx			--> use constraint to run containers on specific node
 
 docker service ls     -> list current services
 docker service ps SERVICE   -> list service tasks
@@ -396,6 +404,7 @@ scaling services: there are 2 ways to scale services
 ex: docker service update --replica <PELICAS> SERVICE --> docker service update --replica 2 nginx
 2. using docker service scale
 ex: docker service scale SERVICE=REPLICAS   --> docker service scale nginx=2
+docker service update --rollback <service name>		--> to rollback to previous state
 
 Node Labels: 
 You can add peices of metadata to your swarm nodes using node labels. Then you can use labels to determine which nodes
@@ -403,6 +412,14 @@ tasks will run on.
 Syntax: docker node update --label-add LABEL=VALUE NODE       --> add label to nodes
 docker node update --label-add availability_zone=east node1
 docker node update --label-add availability_zone=west node2
+
+docker node update --availability drain <node_id>			--> for maintainance
+docker node update --availability active <node_id>
+
+docker node promote		--> promote as manager
+docker node demote		--> demote one or more nodes from manager
+
+docker swarm leave		--> to leave cluster
 
 Node constraints: To run services tasks only on nodes with specific label value use --contraint flag with docker service create
 ex: docker service create --contraint node.labels.LABEL=VALUE IMAGE
@@ -508,6 +525,11 @@ dockr stack ps STACKNAME     --> list the tasks associated with stack
 docker stack services STACKNAME   --> list services associated with stack
 docker stack rm STACKNAME   -> delete stack
 
+
+docker stack use the same compose file with addition of below tags under container. 
+deploy:
+ replicas: number
+ 
 
 Storage and Volumes: (/var/lib/docker/volumes)
 image consist of read only layers and when we start container writable layer gets added. writable layer gets deleted when container deleted. To persist changes made in writable layer use Storage and volumes
