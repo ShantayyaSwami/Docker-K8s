@@ -1,3 +1,4 @@
+[KANIKO + BUILDKIT] --> daemonless containerization tools usually used in CI/CD(jenkins) to build container images. 
 Docker is an opensource containerization platform for developing, shipping and running application.
 Its is designed to solve problem statement of "it works on my machine" i.e code portability.
 its client side pgm
@@ -31,6 +32,7 @@ guest OS|Guest OS|gues OS|                                        |bin/lib   |co
 os on top of os                                                    and use some chunks of kernal to interact with underlying os
 2. resource hungry						  2. Not a resource hungry
 3. starts and run slow 						  3. Starts and run much fast 
+4. cannot run multiple microservices in single vm		  4. can microservice app in docker.  
 
 Running a container:
 Busybox - very small, light weight layer of linux
@@ -116,7 +118,7 @@ container then it will delete tag but not actual image turning into dangling ima
 Image cleanup: 
 docker system df   --> get info about disk usage on system
 docker system df -v --> detailed info
-docker sytem prune 	--> delete images/containers/volumes not used
+docker sytem prune 	--> delete images/containers not used
 docker image prune   -> to delete dangling images (images with no referrnce to tags or containers)
 docker image prune -a --> remove all unused images (not used by container)
 docker image save <image name> > or -o tarname.tar		--> when you dont have private or public repo and want to share image to other teams. 
@@ -188,7 +190,7 @@ most common: FROM,WORKDIR,COPY,RUN,CMD,ENTRYPOINT
 
 docker context: current dir contents like dockerfile,necessary files sent to docker daemon to build image. The first thing build process does is send the entire context(current woring dir contents) recursively to daemon as tarball. 
 
-
+----
 ex: build python-flask docker image
 ARG PYTHON_VERSION:3.8
 FROM: python:$PYTHON_VERSION
@@ -202,15 +204,36 @@ CMD python ./index.py
 docker build -t TAG .   <-t tag and . is dir where dockerfile resides> <--build-arg PYTHON_VERSION=latest if no value provided in dockerfile>
 docker run IMAGE
 
+----
+ex: build java apps docker image
+FROM openjdk:8/11-alpine
+WORKDIR /app
+COPY /target/demo-0.0.1-SNAPSHOT.jar/ demo.jar
+CMD["java","-jar","demo.jar"]
+
+docker build -t demoapp/0.1 . 		--> this will create docker image from dockerfile
+docker run demoapp/0.1 hostname		--> here CMD will replace with hostname so app will not execute so better to use ENTRYPOINT for main commands
+
+Note: use can --no-cache if docker dont want to use cache to build image. 
+ 
+-----
+
 Building efficient docker images:
 general tips:
 1. Put things that are unlikely to change on lower-level layers so to use caching
 2. Dont create unnecessary layers
 3. Avoid including any unnecessary files, packages in images
 
+you can acheive in 3 ways:
+1. Multistage builds
+2. alpines base images
+3. Distroless base images
+
+
 Multi-Stage builds  -> Have >1 FROM directive in dockerfile and each FROM directive starts new stage.
 each stage begins completely new set of FS layer, allowing you to selectively copy only files that you need from previous layer.
 using --from flag to copy files from previous layer.
+In multistage builds previous stage creates temp build env and gets deleted once image created.
 
 ex: COPY --from=0 ...
 or
@@ -219,6 +242,49 @@ FROM <base-image> AS stage1
 FROM <base-image> AS stage2
 COPY --from=stage1 ...
  
+Ex: build java apps image 
+FROM maven:alpine as BUILD
+WORKDIR /app
+COPY . .
+RUN mvn clean package /app/target/demo.jar
+
+FROM openjdk:8-apline
+WORKDIR  /app
+COPY --from=BUILD /app/target/demo.jar demo.jar
+ENTRYPOINT["java","-jar","demo.jar"]
+
+
+ex2:
+FROM alpine/git as gitclone 
+WORKDIR /app
+git clone <url>
+
+FROM maven:alpine as build
+WORKDIR /app
+COPY --from=gitclone /app/target/employee-application.war .
+RUN mvn package
+
+FROM tomcat:9.0 as dockerize
+COPY --from=build /app/target/*.war /usr/local/tomcat/webapps
+EXPOSE 8080
+
+docker build -t shantayyaswami/webapp:v1 . --target=build		--> if we inlcude target build image till specific build stage
+
+-------container security-------------
+while building container images we often concern with 2 things
+1. The security(through scanning each image layer) --> image layer scanning tools clair,Trivy,Anchore
+2. Size of the image(Multistage build or distroless images) 		--> distroless or minimul size images like alpine reduce attack surface. 
+
+
+---best practices--
+1. Do not run container as ROOT
+2. avoid copying unnecessary files
+3. marge layers
+4. using alpine or distroless images as base image
+5. using multistage builds
+6. health checks
+7. avoid exposing unnecessary ports
+8. hardcoding credentials
 
 Flattening an Image: sometimes image with few layers perform better and in few cases, you may want to take an image with many 
 layers and flatten them into single layer.
@@ -230,9 +296,28 @@ docker export flat_container > flat.tar
 cat flat.tar | docker import - flat:latest
 
 
-
+Container Orchestration: all about managing lifecycle of containers(starting,stopping,moving containers across diff hosts,lead balancing,HA etc)
 Docker Swarm: feature of docker, which allows you to build distributed cluster of docker machines to run containers.
 it facilitates orchestration, high availability and scaling. 
+
+				docker CLI
+				   ↓
+			 ---------------------------------
+ 			|	swarm manager 		 |
+			| 				 |
+	store()	<-------|--scheduler	Discovery service|
+			----------------------------------
+			API over↓ http		↓
+			--------↓------  -------↓---------
+			|docer daemon |  | docker daemon |
+			|swarm worker |  |swarm worker   |
+			|-------------|  |---------------|
+
+manager: manages cluster
+worker: run the tasks assigned by scheduler
+scheduler: schedule container onto nodes based upon rules and filters
+Discovery service: helps swarm manager discover new nodes and fetch their details 
+store(key-value db): stores state of cluster. 
 
 docker Swarm		 vs			Kubernates
 1. easy installation 				complex installation process
@@ -259,7 +344,7 @@ Backup and restore docker swarm:
 2. take backup of /var/lib/docker/swarm dir
 3. start service
 
-Docker Orchestration: 
+
 Lock and Unlock swarm cluster: 
 docker swarm encrypts sensitive data for security reason (logs on swarm manager + TLS communication btween swarm nodes) 
 swarm manages the keys(unenrypted) used for above encryption so Autolock is the feature which locks the swarm.
@@ -329,9 +414,12 @@ docker service create --placement-pref spread=node.labels.LABEL IMAGE
 ex: docker service create --placement-pref spread=node.labels.availability_zone nginx
 
 
+stateful and stateful applicatons: 
+stateful applications hold onto your data across different sessions(like shopping cart thats retains items) while stateless applications does not remember your 
+past interactions and treat each new interaction as new one. 
 
 Docker compose: (containers created though docker compose shares the same network)
-Tool that allows you to run multi-container application defined using declarative format in single node(YAML file).
+Tool that allows you to run multi-container application as single service. defined using declarative format in single node(YAML file).
 Note:compose does not use swarm mode to deploy services to multiple nodes in swarm. To deploy apps across swarm use
 "docker stack deploy"
 define docker-compose project:
@@ -340,6 +428,37 @@ define docker-compose project:
 3. add docker-compose.yaml to dir
 4. define apps using docker.compose.yaml
 ex: 
+docker-compose file structure:
+version:
+service:
+  container-01:					--> we can also build images using build keyword instead of using already built images. 
+    build: 
+      context: <location of dockerfile>
+      dockerfile: Dockerfile.prod		--> no need to use dockerfile keyword is name is Dockerfile
+    image: <if we use buid then this keyword will tag to image build in above step>  
+    env:
+    ports:
+    volume:
+    network:
+    restart: 
+  container-02:
+    command: 					--> its like CMD we mention in dockerfile or running container. 
+    image: 
+    env:
+    port:
+    volume:
+    network:
+volumes: <optinal>				--> whenever keyword appended with 's indicates list
+ - my_db
+networks: <optional>
+ - my_net
+
+
+Note: volumes and networks are same as 
+	docker create volume my_db
+	docker create network my_net
+docker compose creates custom network for you as default. use depends_on: <list> unser container to use dependency management. 
+-----------------------
 version: '3'
 services: 
    web: 
@@ -498,6 +617,37 @@ ex: docker run -d --name c1 --net host nginx: latest
 
 none network: containers will only have local loopback address. cotainers kept in total isolation. when want to disable networking functionality for specific container. 
 ex: docker run -d --name c1 --net none ngnix: latest
+
+
+-----Load balancing in docker------
+Process of distributing traffic load to group of backend servers(server pool)
+
+reverse proxy: 
+1. hides topological design of backend servers and even in attack takes max hit to protect app servers. 
+2. act as cache to reduce load on backend servers.
+3. easy to log and audit all requests. 
+
+---load balancing through dns resolution(--net-alias)
+docker run -d --net my_net --name c1 shantayyaswami/hello-flask:v1 --net-alias web
+docker run -d --net my_net --name c2 shantayyaswami/hello-flask:v1 --net-alias web
+docker run -d --net my_net --name c3 shantayyaswami/hello-flask:v1 --net-alias web
+
+doker run -d --net my_net -p 80:80 --name nginx shantayyaswami/nginx --net-alias web
+
+---configure nginx as load balancer:
+vi nginx.conf
+http--> server--> 
+upstream notes<lb name>{			--> add this directory
+	server web:5000				--> c1,c2,c3 container application running on port 5000
+ }	
+server{
+ listen 80;
+location /{
+ # proxy_pass <destination lb name>
+   proxy_pass http://notes;
+}
+}
+
 
 Docker best practices:
 1. Use the docker official images as base image
