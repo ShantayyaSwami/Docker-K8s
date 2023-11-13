@@ -8,6 +8,13 @@ social networking platform
 container: Is a standerd unit of software that packages up code, all its dependancies, config, processes, networking, 
 os(some chunks) so the application runs quickly and relaibly from one platform to another. 
 portable artifcat, easily shared and moved around.
+simple words "container is a process running in standalone env with its own space and resources through cgroups and namespaces. its like light weight vm. 
+control groups: allocates and limits resources such as cpu,memory thats are used by container. 
+namespaces: to provide isolated workspace((fs,network,storage etc) to run processes. pid,net,ipc,mnt,uts <kernal and version identfier>
+
+Note: containers root user does not have root privilage on host. 
+container runtime: also called as container engine, its a software that is responsible for running containers. (docker,containerd,rtc,podman etc)
+create--> run--> paused--> stopped--> deleted	--> life cycle of container. 
 
 Docker-client
     |
@@ -22,17 +29,21 @@ app     | app    |app    |                                        |app       |ap
 config  |config  |config |                                        |config    |config |config |
 guest OS|Guest OS|gues OS|                                        |bin/lib   |contnr2|contnr3|
 ----------------------------                                      ---------------------------------
-        Hypervisor                                                  Docker Engine layer (mainly Linux)
+        Hypervisor          	--> h/w virtualization             Docker Engine layer (mainly Linux)		--> uses os virtualization
 ----------------------------                                      -----------------------------------
       Operating system 							 Operating system
 ---------------------------                                       ------------------------------------
         Hardware                                                            Hardware
 ---------------------------                                       -----------------------------------
-1. heavy weight i.e creates standalone                            1. light weight i.e it bundles application dependacies
+1. heavy weight(GB's) i.e creates standalone                      1. light weight(as les as 5MB) i.e it bundles application dependacies
 os on top of os                                                    and use some chunks of kernal to interact with underlying os
 2. resource hungry						  2. Not a resource hungry
-3. starts and run slow 						  3. Starts and run much fast 
-4. cannot run multiple microservices in single vm		  4. can microservice app in docker.  
+3. starts and run slow(starts in minute)			  3. Starts and run much fast (starts in second)
+  
+
+Hypervisor: its a software that creates and runs virtual machines. 
+1. bare metal hypervisor (runs directly on hosts hardware. ex: microsoft hyper-v)
+2. hosted hypervisor (runs as software layer on os. ex: virtual box)
 
 Running a container:
 Busybox - very small, light weight layer of linux
@@ -74,12 +85,6 @@ downgrading docker:
 3. install lower docker version 
 4. start docker service
 
-
-Namespaces: linux feature that allows processes to be isolated in terms of resources they see and also used to prevent
-diff processes from interacting with one another. docker uses namespaces to isolate conatainers. it allows the containers to work
-independently and securely
-docker uses following namespaces to isolate rsrsces for containers:
-pid,net,ipc,mnt,uts <kernal and version identfier>
 
 Docker images:
 Docker image is a immutable file containing the code and components needed to run soft in container. 
@@ -125,17 +130,21 @@ docker image save <image name> > or -o tarname.tar		--> when you dont have priva
 
 docker load < imagename.tar	--> to load image tar
 
-Note: dockerhub credentails are stored under /root/.docker/config.json	--> auth: base64 encoded value for username and password. you can decode using 
-echo "encoded value" | base64 -d	--> it will show credentail.
+Note: dockerhub credentails are stored under $HOME/.docker/config.json	--> auth: base64 encoded value for username and password. you can decode using 
+echo "encoded value" | base64 -d	--> it will show credential.
 auth will be empty once you are exited from docker. 
 
 
 ------Docker container commands------
-docker ps -a 		--> shows all containers
-docker container rm <ID>		--> remove container. can't remove running container use -f if want
-docker run -d --name=<namee> <image name>	--> create and start container in detached mode with cntainer name
+docker ps -a 					--> shows all containers
+docker container rm <ID>			--> remove container. can't remove running container use -f if want
+docker run -d --name=<name> <image name>	--> create and start container in detached mode with cntainer name
 docker log -f <container id>			--> check runtime logs like tail in linux. -f: follow
-docker rm -f ${docker ps -aq}			--> remove exited containers forcefully
+docker rm -f ${docker ps -aq}			--> remove exited containers forcefully. -q shoes only ID
+docker ps -q	--> shows only running containers. 
+
+docker cp source destination		--> copy files from host to container & vice-versa <docker cp nginx.conf web:/temp> --> seems like scp
+docker stats				--> shows memory,cpu consumption of container. 
 
 Note: container goes into exited state when container fails/completes or container asking for something which we are not giving. 
 docker run -it ubantu			--> start ubantu and provide interactive mode(STD_IN terminal) with -i and tty terminal with -t (STD_OUT terminal)
@@ -155,7 +164,7 @@ docker attach container_id		--> run container in foreground mode
 
 Dockerfiles: helps to create our own images. Dockerfile is a set of instructions which are used to construct an image.
 (base image,default command,application(.war/ear file),dependancies (runtime)). 
-Note: 99% dockerfile starts with FROM, but only ARG can come before FROM in some cases. always use alpine or slim version of base image to resuce image size. 
+Note: 99% dockerfile starts with FROM, but only ARG can come before FROM in some cases. always use alpine or slim version of base image to reduce image size. 
 Google distroless images(find in gcr.io repo)  are speciliazed container images with only apps and its dependancies without any unnecessary extras like pckg manager or shell. docker always looks for Dockerfile to build however if you have diff name then use -f docerfilename
 
 these instructions are called directives.
@@ -169,14 +178,14 @@ run commands has 2 forms 1.shell form(creates shell and excutes cmd)	2. executab
 ex: 
 1. RUN echo "hello world"
 2. RUN ["/bin/echo","hello world"]
-each RUN command adds a layer in image so its bad practice to use multiple RUN to execute muliple commands rather use / to separate shell commands in single run. 
+each RUN command adds a layer in image so its bad practice to use multiple RUN to execute muliple commands rather use \ to separate shell commands in single run. 
 ex: RUN echo "Hello World" && \
         apt-get update && \
         apt-get install utils -y
 
 COPY ->  copy file from host to image
 ADD -> similar to COPY but also pull files using URL and extract archive into loose file in images
-EXPOSE -> port to be published. port number must be of application. EXPOSE is just for documentation, it will open the port in container. 
+EXPOSE -> port to be published. port number must be of application. EXPOSE is just for documentation, it will not open the port in container. 
 VOLUME -> user persistent volume from host machine in containers. used for configuration files not for main files which apps need
 CMD  -> sets default commands and/or parameters which can be overridden when the container is run. can have multiple CMD but last one referred. 
 ENTRYPOINT --> specifies the main command that will be executed when the container starts. CMD just pass a argument/parameter to an entrypoint. 
@@ -193,7 +202,7 @@ docker context: current dir contents like dockerfile,necessary files sent to doc
 ----
 ex: build python-flask docker image
 ARG PYTHON_VERSION:3.8
-FROM: python:$PYTHON_VERSION
+FROM: python:${PYTHON_VERSION}
 LABEL author="Shantayya Swami"			--> key=value 
 WORKDIR /app
 COPY . .
@@ -255,20 +264,20 @@ ENTRYPOINT["java","-jar","demo.jar"]
 
 
 ex2:
-FROM alpine/git as gitclone 
+FROM git-alpine as gitclone 
 WORKDIR /app
 git clone <url>
 
 FROM maven:alpine as build
 WORKDIR /app
-COPY --from=gitclone /app/target/employee-application.war .
+COPY --from=gitclone /app/target/employee-application/ .
 RUN mvn package
 
 FROM tomcat:9.0 as dockerize
 COPY --from=build /app/target/*.war /usr/local/tomcat/webapps
 EXPOSE 8080
 
-docker build -t shantayyaswami/webapp:v1 . --target=build		--> if we inlcude target build image till specific build stage
+docker build -t shantayyaswami/webapp:v1 . --target=build		--> if we inlcude target means build image til specific build stage
 
 -------container security-------------
 while building container images we often concern with 2 things
@@ -296,242 +305,12 @@ docker export flat_container > flat.tar
 cat flat.tar | docker import - flat:latest
 
 
-Container Orchestration: all about managing lifecycle of containers(starting,stopping,moving containers across diff hosts,lead balancing,HA etc)
-Docker Swarm: feature of docker, which allows you to build distributed cluster of docker machines to run containers.
-it facilitates orchestration, high availability and scaling. 
-
-				docker CLI
-				   ↓
-			 ---------------------------------
- 			|	swarm manager 		 |
-			| 				 |
-	store()	<-------|--scheduler	Discovery service|
-			----------------------------------
-			API over↓ http		↓
-			--------↓------  -------↓---------
-			|docer daemon |  | docker daemon |
-			|swarm worker |  |swarm worker   |
-			|-------------|  |---------------|
-
-manager: manages cluster
-worker: run the tasks assigned by scheduler
-scheduler: schedule container onto nodes based upon rules and filters
-Discovery service: helps swarm manager discover new nodes and fetch their details 
-store(key-value db): stores state of cluster. 
-
-overlay-network: Overay network spans across entire cluster allowing communication between containers across multiple nodes. (default for swarm)
-docker create network my_net --driver=overlay
-
-Note: following ports must be open for swam cluster to work
-TCP port 2377 for cluster management communicaton
-TCP and UDP port 7946 for communication among nodes
-UDP port of 4789 for overlay network traffic
-
-docker Swarm		 vs			Kubernates
-1. easy installation 				complex installation process
-2. manual scaling				supports auto-scaling
-3. auto load-balancing				setup manual load-balancer
-4. supports third party monitoring tools	Built in monitoring 
-5. Integrates docker CLI			need for separate CLI (kubectl)
-
-configuring swarm manager:
-1. install docker-ce on swarm manager machine
-2. initialize docker swarm with <docker swarm init --advertise-addr private-ip>
-3. check <docker info>
-4. list current nodes in docker swarm <docker node ls>
-
-configure swarm nodes:
-1. install docker-ce on worker node
-2. get join command from swarm manager
---> run <docker swarm join-token worker> on manager to get join command
-3. run join command on worker nodes provided in step 2
-4. verify worker node joined manager or not with <docker node ls> on manager node
- 
-Backup and restore docker swarm:
-1. stop docker service
-2. take backup of /var/lib/docker/swarm dir
-3. start service
-
-
-Lock and Unlock swarm cluster: 
-docker swarm encrypts sensitive data for security reason (logs on swarm manager + TLS communication btween swarm nodes) 
-swarm manages the keys(unenrypted) used for above encryption so Autolock is the feature which locks the swarm.
-this gives greater control of keys and can allow greater security. However, it require to unlock swarm every time swarm manager restarts.
-<docker swarm unlock>
-docker swarm unlock-key   -> if forget key
-docker swarm unlock-key --rotate
-
-Enable and disable Autolock:
-docker swarm update --autolock=true
-docker swarm update --autolock=false
-
-High availability in swarm cluster:
-Multiple managers  -> good to have to maintain high availability and fault tolerent swarm. Docker uses Raft consensus algo
-to maintain consistent cluster state across multiple managers.
-Quorum -> is majority(>half) of managers in swarm. It must be maintained to make changes in swarm cluster state.
-Docker recc that you distribute your manager nodes across at least 3 AZ.
-
-Services:
-A service is the image for microservices like HTTP server,db server,any type of executable program that you wish to run in distributed env. A service specifies a set of one or more replica tasks. These tasks will be auto distributed across nodes in cluster and exec as containers.
-
-Docker service create [OPTIONS] IMAGE ARG
-ex:  docker service create --name nginx --replica 3 -p 8080:80
---replica   -> number of replica tasks to create for service.
---name     --> name of the service
--p PUBLISHED_PORT:SERVICE_PORT   --> publish a port so that service can be accessed externally
-
-Templates can be used to give dynamic values to some flags with docker service create
---hostname
---mount
---env
-ex: docker service create -env NODE_HOSTNAME="{{.Node.Hostname}}" --replica=3 --name web nginx
-docker service create --contraint=node.role=manager --replica=3 --name web nginx			--> use constraint to run containers on specific node
-
-docker service ls     -> list current services
-docker service ps SERVICE   -> list service tasks
-docker service inspect SERVICE   --> get more info about service
-docker service update [OPTION] SERVICE   --> make changes to service
-docker service rm SERVICE --> delet an existing service
-
-replicated     vs    Global services
-replicated services will run req number of replica tasks across swarm cluster.
-ex: docker service create --name webserver --replica 3 nginx
-global service will run one task on each node.
-ex: docker service create --mode global nginx
-
-scaling services: there are 2 ways to scale services
-1. using docker service update
-ex: docker service update --replica <PELICAS> SERVICE --> docker service update --replica 2 nginx
-2. using docker service scale
-ex: docker service scale SERVICE=REPLICAS   --> docker service scale nginx=2
-docker service update --rollback <service name>		--> to rollback to previous state
-
-Node Labels: 
-You can add peices of metadata to your swarm nodes using node labels. Then you can use labels to determine which nodes
-tasks will run on. 
-Syntax: docker node update --label-add LABEL=VALUE NODE       --> add label to nodes
-docker node update --label-add availability_zone=east node1
-docker node update --label-add availability_zone=west node2
-
-docker node update --availability drain <node_id>			--> for maintainance
-docker node update --availability active <node_id>
-
-docker node promote		--> promote as manager
-docker node demote		--> demote one or more nodes from manager
-
-docker swarm leave		--> to leave cluster
-
-Node constraints: To run services tasks only on nodes with specific label value use --contraint flag with docker service create
-ex: docker service create --contraint node.labels.LABEL=VALUE IMAGE
-docker service create --constraint node.labels.availability_zone=east nginx   or
-docker service create --constraint node.labels.availability_zone!=east nginx 
-
-Placement-pref: use --placement-pref with the spread strategy to spread tasks evenly across all values of perticular label.
-docker service create --placement-pref spread=node.labels.LABEL IMAGE
-ex: docker service create --placement-pref spread=node.labels.availability_zone nginx
-
-
-stateful and stateful applicatons: 
+stateful and stateless applicatons: 
 stateful applications hold onto your data across different sessions(like shopping cart thats retains items) while stateless applications does not remember your 
 past interactions and treat each new interaction as new one. 
 
-Docker compose: (containers created though docker compose shares the same network)
-Tool that allows you to run multi-container application as single service. defined using declarative format in single node(YAML file).
-Note:compose does not use swarm mode to deploy services to multiple nodes in swarm. To deploy apps across swarm use
-"docker stack deploy"
-define docker-compose project:
-1. make dir to contain your docker-compose proj
-2. change to proj dir
-3. add docker-compose.yaml to dir
-4. define apps using docker.compose.yaml
-ex: 
-docker-compose file structure:
-version:
-service:
-  container-01:					--> we can also build images using build keyword instead of using already built images. 
-    build: 
-      context: <location of dockerfile>
-      dockerfile: Dockerfile.prod		--> no need to use dockerfile keyword is name is Dockerfile
-    image: <if we use buid then this keyword will tag to image build in above step>  
-    env:
-    ports:
-    volume:
-    network:
-    restart: 
-  container-02:
-    command: 					--> its like CMD we mention in dockerfile or running container. 
-    image: 
-    env:
-    port:
-    volume:
-    network:
-volumes: <optinal>				--> whenever keyword appended with 's indicates list
- - my_db
-networks: <optional>
- - my_net
 
-
-Note: volumes and networks are same as 
-	docker create volume my_db
-	docker create network my_net
-docker compose creates custom network for you as default. use depends_on: <list> unser container to use dependency management. 
------------------------
-version: '3'
-services: 
-   web: 
-     image: nginx
-     port: 
-     - '8080:80'
-   redis: 
-     image: redis:alpine
-
-version: '3'
-services:
-  mongodb: 
-    image: mongo
-    ports: 
-     - "27017:27017"
-    environment:
-     - USERNAME: admin
-     - PASS: password
-    volumes: 
-     mymongo-data: /data/db
-  mongo-express:
-    image: mongo-express
-    ports: 
-     - "27017:27017"
-    environment:
-     - USERNAME: admin  
-     - PASS: password
-     - mongo-server: mongodb
-Volumes: 
-  mymongo-data: 
-     driver: local 
-
-docker-compose up -f <filename>
-docker-compose down -f <filename>
-
----create and run resources
-docker-compose up -d 
-docker-compose ps    --> list containers/services running under docker-compose
-docker-compose down   --> stop and remove all resources
-
-Docker stack:
-A Stack is a collection of interrelated services that can be deployed and scaled as unit. docker stack are similar to the 
-multi container apps created using docker-compose. However they can be scaled and executed across swarm cluster.
-docker stack deploy -c COMPOSE_FILE STACKNAME    --> Deploy stack to swarm cluster using compose file
-docker stack ls			--> list current stacks
-dockr stack ps STACKNAME     --> list the tasks associated with stack
-docker stack services STACKNAME   --> list services associated with stack
-docker stack rm STACKNAME   -> delete stack
-
-
-docker stack use the same compose file with addition of below tags under container. 
-deploy:
- replicas: number
- 
-
-Storage and Volumes: (/var/lib/docker/volumes)
+--------------------Storage and Volumes: (/var/lib/docker/volumes)---------------------------
 image consist of read only layers and when we start container writable layer gets added. writable layer gets deleted when container deleted. To persist changes made in writable layer use Storage and volumes
 
 Storage drivers(Graph drivers):
@@ -656,6 +435,10 @@ docker run -d --net my_net --name c3 shantayyaswami/hello-flask:v1 --net-alias w
 
 doker run -d --net my_net -p 80:80 --name nginx shantayyaswami/nginx --net-alias web
 
+Note: --net-alias is used to provide common name to multiple container in network so that all containers can be accessed over network to do dns resultion. 
+--links  --> used to connect 2 containers in defaut bridge network (deprecated option)
+docker run --name c1 --links c2:c2		--> --links alias:container_name
+
 ---configure nginx as load balancer:
 vi nginx.conf
 http--> server--> 
@@ -671,6 +454,252 @@ location /{
 }
 
 
+-------------------------------------Docker compose: (containers created though docker compose shares the same network)-----------------------------------
+Tool that allows you to run multi-container application as single service. defined using declarative format in single node(YAML file).
+Note:compose does not use swarm mode to deploy services to multiple nodes in swarm. To deploy apps across swarm use
+"docker stack deploy"
+define docker-compose project:
+1. make dir to contain your docker-compose proj
+2. change to proj dir
+3. add docker-compose.yaml to dir
+4. define apps using docker.compose.yaml
+ex: 
+docker-compose file structure:
+version:
+services:
+  container-01:					--> we can also build images using build keyword instead of using already built images. 
+    build: 
+      context: <location of dockerfile>
+      dockerfile: Dockerfile.prod		--> no need to use dockerfile keyword is name is Dockerfile
+    image: <if we use buid then this keyword will tag to image build in above step>  
+    env:
+    ports:
+    volume:
+    network:
+    restart: 
+  container-02:
+    command: 					--> its like CMD we mention in dockerfile or running container. 
+    image: 
+    env:
+    port:
+    volume:
+    network:
+volumes: <optinal>				--> whenever keyword appended with 's indicates list
+ - my_db
+networks: <optional>
+ - my_net
+
+
+Note: volumes and networks are same as 
+	docker create volume my_db
+	docker create network my_net
+by default docker compose creates custom network for you. use depends_on: <list> under container to use dependency management. 
+-----------------------
+version: '3'
+services: 
+   web: 
+     image: nginx
+     port: 
+     - '8080:80'
+   redis: 
+     image: redis:alpine
+
+version: '3'
+services:
+  mongodb: 
+    image: mongo
+    ports: 
+     - "27017:27017"
+    environment:
+     - USERNAME: admin
+     - PASS: password
+    volumes: 
+     mymongo-data: /data/db
+  mongo-express:
+    image: mongo-express
+    ports: 
+     - "27017:27017"
+    environment:
+     - USERNAME: admin  
+     - PASS: password
+     - mongo-server: mongodb
+volumes: 
+  mymongo-data: 
+     driver: local 
+
+docker-compose up -f <filename>
+docker-compose down -f <filename>
+
+---create and run resources
+docker-compose up -d 
+docker-compose ps    --> list containers/services running under docker-compose
+docker-compose down   --> stop and remove all resources
+
+Docker stack:
+A Stack is a collection of interrelated services that can be deployed and scaled as unit. docker stack are similar to the 
+multi container apps created using docker-compose. However they can be scaled and executed across swarm cluster.
+docker stack deploy -c COMPOSE_FILE STACKNAME    --> Deploy stack to swarm cluster using compose file
+docker stack ls			--> list current stacks
+dockr stack ps STACKNAME     --> list the tasks associated with stack
+docker stack services STACKNAME   --> list services associated with stack
+docker stack rm STACKNAME   -> delete stack
+
+
+docker stack use the same compose file with addition of below tags under container. 
+deploy:
+ replicas: number
+
+
+------------------------------Container orchestration-------------------
+Container Orchestration: all about managing lifecycle of containers(starting,stopping,moving containers across diff hosts,lead balancing,HA etc)
+Docker Swarm: feature of docker, which allows you to build distributed cluster of docker machines to run containers.
+it facilitates orchestration, high availability and scaling. 
+
+				docker CLI
+				   ↓
+			 ---------------------------------
+ 			|	swarm manager 		 |
+			| 				 |
+	store()	<-------|--scheduler	Discovery service|
+			----------------------------------
+			API over↓ http		↓
+			--------↓------  -------↓---------
+			|docer daemon |  | docker daemon |
+			|swarm worker |  |swarm worker   |
+			|-------------|  |---------------|
+
+manager: manages cluster
+worker: run the tasks assigned by scheduler
+scheduler: schedule container onto nodes based upon rules and filters
+Discovery service: helps swarm manager discover new nodes and fetch their details 
+store(key-value db): stores state of cluster. 
+
+overlay-network: Overay network spans across entire cluster allowing communication between containers across multiple nodes. (default for swarm)
+docker create network my_net --driver=overlay
+
+Note: following ports must be open for swam cluster to work
+TCP port 2377 for cluster management communicaton
+TCP and UDP port 7946 for communication among nodes
+UDP port of 4789 for overlay network traffic
+
+docker Swarm		 vs			Kubernates
+1. easy installation 				complex installation process
+2. manual scaling				supports auto-scaling
+3. auto load-balancing				setup manual load-balancer
+4. supports third party monitoring tools	Built in monitoring 
+5. Integrates docker CLI			need for separate CLI (kubectl)
+
+configuring swarm manager:
+1. install docker-ce on swarm manager machine
+2. initialize docker swarm with <docker swarm init --advertise-addr private-ip>
+3. check <docker info>
+4. list current nodes in docker swarm <docker node ls>
+
+configure swarm nodes:
+1. install docker-ce on worker node
+2. get join command from swarm manager
+--> run <docker swarm join-token worker> on manager to get join command
+3. run join command on worker nodes provided in step 2
+4. verify worker node joined manager or not with <docker node ls> on manager node
+ 
+Backup and restore docker swarm:
+1. stop docker service
+2. take backup of /var/lib/docker/swarm dir
+3. start service
+
+
+Lock and Unlock swarm cluster: 
+docker swarm encrypts sensitive data for security reason (logs on swarm manager + TLS communication btween swarm nodes) 
+swarm manages the keys(unenrypted) used for above encryption so Autolock is the feature which locks the swarm.
+this gives greater control of keys and can allow greater security. However, it require to unlock swarm every time swarm manager restarts.
+<docker swarm unlock>
+docker swarm unlock-key   -> if forget key
+docker swarm unlock-key --rotate
+
+Enable and disable Autolock:
+docker swarm update --autolock=true
+docker swarm update --autolock=false
+
+High availability in swarm cluster:
+Multiple managers  -> good to have to maintain high availability and fault tolerent swarm. Docker uses Raft consensus algo
+to maintain consistent cluster state across multiple managers.
+Quorum -> is majority(>half) of managers in swarm. It must be maintained to make changes in swarm cluster state.
+Docker recc that you distribute your manager nodes across at least 3 AZ.
+
+Services:
+A service is the image for microservices like HTTP server,db server,any type of executable program that you wish to run in distributed env. A service specifies a set of one or more replica tasks. These tasks will be auto distributed across nodes in cluster and exec as containers.
+
+Docker service create [OPTIONS] IMAGE ARG
+ex:  docker service create --name nginx --replica 3 -p 8080:80
+--replica   -> number of replica tasks to create for service.
+--name     --> name of the service
+-p PUBLISHED_PORT:SERVICE_PORT   --> publish a port so that service can be accessed externally
+
+Templates can be used to give dynamic values to some flags with docker service create
+--hostname
+--mount
+--env
+ex: docker service create -env NODE_HOSTNAME="{{.Node.Hostname}}" --replica=3 --name web nginx
+docker service create --constraint=node.role=manager --replica=3 --name web nginx			--> use constraint to run containers on specific node
+
+docker service ls     -> list current services
+docker service ps SERVICE   -> list service tasks
+docker service inspect SERVICE   --> get more info about service
+docker service update [OPTION] SERVICE   --> make changes to service
+docker service rm SERVICE --> delet an existing service
+
+replicated     vs    Global services
+replicated services will run req number of replica tasks across swarm cluster.
+ex: docker service create --name webserver --replica 3 nginx
+global service will run one task on each node.
+ex: docker service create --mode global nginx
+
+scaling services: there are 2 ways to scale services
+1. using docker service update
+ex: docker service update --replica <REPLICAS> SERVICE --> docker service update --replica 2 nginx
+2. using docker service scale
+ex: docker service scale SERVICE=REPLICAS   --> docker service scale nginx=2
+docker service update --rollback <service name>		--> to rollback to previous state
+
+Node Labels: 
+You can add peices of metadata to your swarm nodes using node labels. Then you can use labels to determine which nodes
+tasks will run on. 
+Syntax: docker node update --label-add LABEL=VALUE NODE       --> add label to nodes
+docker node update --label-add availability_zone=east node1
+docker node update --label-add availability_zone=west node2
+
+docker node update --availability drain <node_id>			--> for maintainance
+docker node update --availability active <node_id>
+
+docker node promote		--> promote as manager
+docker node demote		--> demote one or more nodes from manager
+
+docker swarm leave		--> to leave cluster
+
+Node constraints: To run services tasks only on nodes with specific label value use --contraint flag with docker service create
+ex: docker service create --contraint node.labels.LABEL=VALUE IMAGE
+docker service create --constraint node.labels.availability_zone=east nginx   or
+docker service create --constraint node.labels.availability_zone!=east nginx 
+
+Placement-pref: use --placement-pref with the spread strategy to spread tasks evenly across all values of perticular label.
+docker service create --placement-pref spread=node.labels.LABEL IMAGE
+ex: docker service create --placement-pref spread=node.labels.availability_zone nginx
+
+----------------------------------------------------------------------------------------------------------------------------------------- -------
+offcial docker images: dont have / in names + have official sign and name as OFFICIAL IMAGE
+
+--configure non-ssl private registries
+1. open /etc/docker/daemon.json file
+2. edit file wth below info
+{
+"insecure-regustries":["http://private_registry_url"]
+"data-root":location					--> use this to update new docker home
+}
+3. restart docker daemon
+
+ONBUILD: it sets up trigger that gets executed when image is used as base for another image. it used to automate actions in child image when current image is used as basse. 
+ONBUILD COPY . /app					--> used very less
+
 Docker best practices:
 1. Use the docker official images as base image
 2. Use Specific base image version (Latest images are tent to be unstable)
@@ -680,3 +709,5 @@ Docker best practices:
 6. make use of multi-stage builds (for smaller size of images)
 7. Use least pivelaged user.   (docker has root permision which can lead to exploitation of app hosted inside container)
 8. Scan images for vulnerabilities. 
+
+
