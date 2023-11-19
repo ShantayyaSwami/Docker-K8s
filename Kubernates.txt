@@ -1,8 +1,8 @@
+Container orchestration automates the deployment,management,scaling and networkng of containers across the cluster. it focus on managing the lifecycle of containers. 
 K8s  -> open-source platform for managing containarized workload and services. 
-features:
-1. Container Orchestration: prmary purpose of K8s is to dynamically manage containers across multiple host systems. 
-2. Application Reliability : makes it easier to build reliable, sefl-healing and scalable apps.
-3. Automation: To help automate management of your container apps
+
+Verticaal scaling: To scale more, add one or more ram,cpu,memory to the one existing machine.
+Horizontal scaling: To scale more, add more machines to the existing group of distributed systems.  
 
 K8s Architechture overview:1.24
 
@@ -23,19 +23,23 @@ is collection of multi components responsible for managing/controling K8s cluste
 Individual control plane components can run on any machine in the cluster. But usually run on dedicated controller machines.
 
 Kube-API-Server --> serves K8s API. primary interface to control plane and cluster itself. When interacting with K8s cluster we do so using K8s API.
-ETCD --> ETCD is stores the state of K8s cluster. X store app or db data
-Kube-Scheduler --> handles scheduling, the process of selecting an available node in cluster on which to run container. 
-Kube-Controller-Manager --> It runs a collection of multiple controller utilities like detecting failed pods and restarting them.
+ETCD --> ETCD is key-value db, stores the state of K8s cluster. X store app or db data
+Kube-Scheduler --> handles scheduling of pods, irrespective of whether pods are running or stopped. 
+Kube-Controller-Manager --> It does controller utilities like detecting failed pods and restarting them.(manage desired and current state)
 Cloud controller manager --> provides an interface between K8s and cloud platform. It is only used when using cloud based resources with K8s. 
+
 
 K8s Nodes: 
 are machines where containers managed by the cluster run. cluster can have any number of  nodes. 
 Various node components manage containers on machine & communicate with control plane.
 
-Kubelet --> k8s agent runs on each node. It communicate with control plane and ensures that containers run on its node as instructed by control plane. 
-Kubelets also handles the process of reporting container status and other data about container back to control plane. 
+Kubelet --> k8s agent runs on each node. It communicate with control plane(API server) about state of node and ensures that containers(through CRE i.e containerd or docker) run on its node as instructed by control plane. 
+Kubelets also handles the process of reporting container status and other data about container back to API server. 
 Container Runtime --> is not build into k8s. Its a separate peice of software that is responsible to run comtainer on each machine. K8s supports docker/containerd etc
-Kube-Proxy --> is network proxy. It runs on each node and provides networking between containers and services in the cluster. 
+Kube-Proxy --> is network proxy. It runs on each node and provides networking between containers and services(single entrypoint which manages backend nodes) in the cluster. 
+
+CNI: container networking interface maintains the routing rules for container communication inside cluster. 
+coreDNS: DNS service which resolves names to IP.
 
 Kubernates cluster:
 kubeadm is a tool that will simplify the process of setting of K8s cluster. 
