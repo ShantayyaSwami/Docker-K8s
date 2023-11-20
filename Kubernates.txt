@@ -6,17 +6,18 @@ Horizontal scaling: To scale more, add more machines to the existing group of di
 
 K8s Architechture overview:1.24
 
-Control plane                                         Nodes                   
-----------------------------------------------        --------------------------------------------------------
-|________________           _________________ |       |------->Kube Proxy Server|------>Kube Proxy Server    |
+Control plane           	kubectl                              Nodes(30000-32767)                   
+-----------------------------------↓-----------        --------------------------------------------------------
+|________________           _______↓_________ |       |------->Kube Proxy Server|------>Kube Proxy Server    |
 |Kube Controller|---------> |Kube API Server|<------->|                         |                            |
-|____mgr________|           |_______________| |       |------->Kubelet          |------>Kubectl              |
+|____mgr_10252__|           |___6443________| |       |------->Kubelet 10250    |------>Kubectl              |
 |                           ↑     |           |       |          ↓              |         ↓                  |
-| Kube Scheduler------------|     |           |       |     Container Runtime   |    Container Runtime       |                           
+| Kube Scheduler (10251)----|     |           |       |     Container Runtime   |    Container Runtime       |                           
 |                           ↑     ↓           |       |     (docker/containerd) |     (docker/containerd)    |
-| Cloud Controller mgr------↑  ETCDCTL        |       |                         |                            |
+| Cloud Controller mgr------↑ETCDCTL(2379-80) |       |                         |                            |
 |_____________________________________________|       |_________________________|____________________________|
 
+kubectl: command line utility used to interact with k8s cluster. communicates with API server throuh REST API calls for CRUD workloads in kubernetes. 
 
 Control plane: 
 is collection of multi components responsible for managing/controling K8s cluster globally. 
@@ -25,7 +26,7 @@ Individual control plane components can run on any machine in the cluster. But u
 Kube-API-Server --> serves K8s API. primary interface to control plane and cluster itself. When interacting with K8s cluster we do so using K8s API.
 ETCD --> ETCD is key-value db, stores the state of K8s cluster. X store app or db data
 Kube-Scheduler --> handles scheduling of pods, irrespective of whether pods are running or stopped. 
-Kube-Controller-Manager --> It does controller utilities like detecting failed pods and restarting them.(manage desired and current state)
+Kube-Controller-Manager --> brain behind orchestration. It does controller utilities like detecting failed pods and restarting them.(manage desired and current state)
 Cloud controller manager --> provides an interface between K8s and cloud platform. It is only used when using cloud based resources with K8s. 
 
 
@@ -36,10 +37,41 @@ Various node components manage containers on machine & communicate with control 
 Kubelet --> k8s agent runs on each node. It communicate with control plane(API server) about state of node and ensures that containers(through CRE i.e containerd or docker) run on its node as instructed by control plane. 
 Kubelets also handles the process of reporting container status and other data about container back to API server. 
 Container Runtime --> is not build into k8s. Its a separate peice of software that is responsible to run comtainer on each machine. K8s supports docker/containerd etc
-Kube-Proxy --> is network proxy. It runs on each node and provides networking between containers and services(single entrypoint which manages backend nodes) in the cluster. 
+Kube-Proxy --> is network proxy. It runs on each node and provides networking between containers and services(single entrypoint which manages backend nodes) in the cluster by maintaining iptable.  
 
 CNI: container networking interface maintains the routing rules for container communication inside cluster. 
+CRI: container runtime interface acts as bridge between kubelets and container runtime. 
 coreDNS: DNS service which resolves names to IP.
+service: single entrypoint which manages backend nodes. pod to pod communication is very difficult without service as containers are not permanent. name and IP gets change if new container gets created.  so container can talk to service (virtual object. its not container rather configuraton) which manages the backend nodes(pods). 
+
+
+-----Journey of kubectl request------
+
+kubectl 	   kubectl				 kubectl					kube API server
+ | 		  Client validation	--------------> form the HTTP request	-------------------->  server side validation		----------------> ETCD	
+ ---------------> 1. check YAML syntax			1. forms API calls				1. performs authentication      --------------> controller 
+ kubectl run	  2. misconfiguration			2. authentication and cert validation		 and authorization		 -------------> Scheduler
+ kubectl apply	  3. non-supported resources		for user validation				2. verifies the API		-------------> kubelet +
+		  4. fail fast mechanism to avoid	3. reads kubeconfig file									container
+ 		loading API server			4. submit pod spec to API server
+
+
+1. kubectl forms API request and send it to the API server.
+2. APi server authenticates and authorise
+3. API server writes pod object to etcd data store. once write is successful, aknowladgement is sent to API server and to the client.
+4. now pod is in pending state
+5. Scheduler sees that new pod object is created but not bound to any node
+6. Scheduler assigns node to the pod and udpates API server.
+7. API server updates this to the etcd data store. 
+8. kubelets keep querying the API server for any new work loads. it sees that new pod is assigned to it. 
+9. kubelets instructs the container runtime like docker to create container and update the container state back to API server.
+10. APi server update the pod state as running in etcd data store. 
+
+kubectl	 <---------> API server	<--->	etcd			scheduler		kubelet		docker
+			<-------------------------------------->
+			<------------------------------------------------------------->
+											 <-------------->	
+
 
 Kubernates cluster:
 kubeadm is a tool that will simplify the process of setting of K8s cluster. 
