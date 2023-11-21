@@ -72,17 +72,20 @@ kubectl	 <---------> API server	<--->	etcd			scheduler		kubelet		docker
 			<------------------------------------------------------------->
 											 <-------------->	
 
-
+pod : smallest deployable unit that holds and runs the container(one or more).
+deployments/replicasets/replica control: 
+ReplicationController:  is deprecated and has been replaced by ReplicaSets.
+ReplicaSet:  is a lower-level controller that ensures a specified number of replica Pods are running.
+Deployment:  is a higher-level controller that manages ReplicaSets and provides additional features like rolling updates,rollback capabilities etc for deploying and updating applications.
+ 
 Kubernates cluster:
 kubeadm is a tool that will simplify the process of setting of K8s cluster. 
 install containerd/docker --> install K8s packages (kubeadm,kubelet,kubectl) --> initialize cluster with <sudo kubeadm init --pod-network-cidr range --kubernates-version 1.24.0
 --> setup .kube config command from output for cluster communication --> execute join command on nodes from output --> deploy calico network plugin 
 
-K8s Namespaces: K8s objects such as pods and containers, live in namespaces. Namespaces are the way to separate and organize objects in cluster. or Namespaces provides thhe
-mechanism for isolating group of resources within single cluster. 
+K8s Namespaces: K8s objects such as pods and containers, live in namespaces. Namespaces are the way to separate and organize objects in cluster. or Namespaces provides the mechanism for isolating group of resources within single cluster. 
 4 default namespaces:
-1. default : as name says its defaukt namespac
-e when we create any k8s object
+1. default : as name says its default namespace when we create any k8s object
 2. kube-system - user dont have access to it. k8s object such as kubectl, api-server are created under kube-system namespace.
 3. kube-public - publically accessible k8s objects are created user kube-public like Congfigmap, secrete etc
 4. kube-node-lease - contains hear-beats of nodes in k8s cluster + each node has associated least object in namespace + determine availability of nodes
@@ -116,6 +119,18 @@ Minikube --> allows you to automatically set up a local single-node k8s cluster.
 Helm --> provides templating and package management for K8s objects. You can use it to manage your own templates (known as charts). you can download and use shared templates.
 Kompose --> helps you translate docker compose files into K8s objects. If you use docker compose for some of your workflow then can move apps to K8s using Kompose.
 Kustomize --> configuration management tool for managing K8s objects configurations.It allows you to share and re-use template configurations for K8s apps.
+
+
+kubeconfig: file used by kubectl to retrieve the required configuration of kubernetes cluster or to communicate with API server of kubernetes cluster. 
+by default, kuectl looks in below locations
+1. $HOME/.kube dir
+2. export KUBECONFIG=$KUBECONFIG:$HOME/.kube/config  			--> env variable
+3. kubectl config --kubeconfig=config-demo view --minify		--> command line flag
+
+kubeconfig file: user -->context,namespace --> cluster			--> context does the mapping of user to cluster 
+
+context: refers to set of access parameters(cluster server,namespace,user) for kubernetes cluster. used when working with >1 clusters and have diff configurations.
+kubectl config get-contexts/current-context/use-context <context-name> : Display available contexts/current context/Switch to a different context
 
 
 Self draining K8s node: 
@@ -298,8 +313,8 @@ client --> Service--->  pods (endpoints)
                         pods (endpoints)
 
 Each service has type and Service Type determines how and where the service will expose your application. There are 4 types,
-1. ClusterIP  --> expose service inside cluster network
-2. NodePort  --> expose service outside the cluster network. (should be between 30000-32767)
+1. ClusterIP  --> expose service only within cluster network
+2. NodePort  --> expose service outside the cluster network. (should be between 30000-32767) not suitable for prod use case. 
 3. LoadBalancer  --> also expose service outside of cluster network. But they use an external cloud load balancer to do so. works only with cloud platform.
 4. Headless service -> used for statefullsets where each pod is not identicle. set  ClusterIp=none to use headless service. so app pod can directly connect using pod ip address.
 
@@ -442,3 +457,46 @@ spec:
      persistentVolumeClaim:
        claimName: my-pvc
 
+
+
+--------------------common kubectl commands----------------------
+Basic Commands:
+kubectl get: Display one or many resources.
+kubectl describe: Show details of a specific resource.
+kubectl create: Create a resource from a file or from stdin.
+kubectl apply: Apply a configuration to a resource.
+
+Viewing Resources:
+kubectl get pods: List all Pods in the current namespace.
+kubectl get services: List all Services in the current namespace.
+kubectl get deployments: List all Deployments in the current namespace.
+
+
+Interacting with Pods:
+kubectl logs <pod-name>: Print the logs from a Pod.
+kubectl exec -it <pod-name> -- /bin/bash: Start an interactive shell in a Pod.
+
+
+Managing Resources:
+kubectl delete: Delete resources by filenames, stdin, resources, and names, or by resources and label selector
+
+
+Managing Configuration:
+kubectl config: Modify kubeconfig files.
+
+
+Troubleshooting:
+kubectl describe pod <pod-name>: Show details of a Pod, including events.
+kubectl get events: Display events related to Pods and other resources.
+
+
+Cluster Info:
+kubectl cluster-info: Display addresses of the master and services.
+
+
+Contexts:
+kubectl config get-contexts: Display available contexts.
+
+
+Help:
+kubectl --help: Display help for kubectl and its subcommands.
