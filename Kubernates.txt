@@ -1,8 +1,14 @@
+kubectl version --short
 Container orchestration automates the deployment,management,scaling and networkng of containers across the cluster. it focus on managing the lifecycle of containers. 
 K8s  -> open-source platform for managing containarized workload and services. 
 
 Verticaal scaling: To scale more, add one or more ram,cpu,memory to the one existing machine.
 Horizontal scaling: To scale more, add more machines to the existing group of distributed systems.  
+
+K8s objects:
+compute: pod,node,namespace,deployment,Replicaset,statefulset,Deomonset
+networking: service,ingress
+storage: volume,persistentVolume, StorageClass, PersistentVolumeClaim
 
 K8s Architechture overview:1.24
 
@@ -122,7 +128,7 @@ Kustomize --> configuration management tool for managing K8s objects configurati
 
 
 kubeconfig: file used by kubectl to retrieve the required configuration of kubernetes cluster or to communicate with API server of kubernetes cluster. 
-by default, kuectl looks in below locations
+by default, kubectl looks in below locations
 1. $HOME/.kube dir
 2. export KUBECONFIG=$KUBECONFIG:$HOME/.kube/config  			--> env variable
 3. kubectl config --kubeconfig=config-demo view --minify		--> command line flag
@@ -131,6 +137,77 @@ kubeconfig file: user -->context,namespace --> cluster			--> context does the ma
 
 context: refers to set of access parameters(cluster server,namespace,user) for kubernetes cluster. used when working with >1 clusters and have diff configurations.
 kubectl config get-contexts/current-context/use-context <context-name> : Display available contexts/current context/Switch to a different context
+
+
+Pod: smallest deployable unit that holds and runs the container(one or more). managed by controler manager. each pod has name and IP. containers within same pod shares same n/w,volume and namespace. pod spec is the YAML file that k8s use to describe about containers inside pod. 
+pod lifecycle
+1. pending: containers not created yet. in the state of downloading container image obver n/w
+2. running: pod is scheduled on node and atleast one container running state.
+3. succeeded: pod exited with status 0 and will not restart
+4. Failed: all containers in pod exited but atleast one with non-zero status
+5. CrashLoopBackOff: container fail to start and tried again and again
+6. Unknown: for some reason state of pod could not be obtained. 
+
+container lifecycle:(waiting,running,terminated) 
+pod restart policy:
+  1. Always  --> default restart policy in K8s. containers always be restarted if they stop, or completed successfully
+  2. On-Failure --> Will restart container only if container process exits with error code or containr detect to be unhealthy by livenes probe. X after successfully completed. 
+  3. Never  --> always cause the pods container to never be restarted. even if container exits or liveness probe fails. 
+
+multi-container pod design patterns:
+1. Init Containers:are containers that run once during the startup process of pods. Pod can have any number of init containers and they will each run once (in order) to completion. you can use init containers to do variety of startup tasks. They are often useful in keeping main containers lighter and more secure by offloading startup tasks to separate container. (works like bootstrap script)
+2. Sidecar: its an auxiliary container thats runs alongside and complements main app container. it does additional functionalities like logging,monitoring,security etc
+3. Ambassador: proxy pattern. acts as gateway or mediator for n/w communication. often handling tasks such as routing,load balancing etc.
+4. Adaptor: serves as translator between diff components. plays crutial role in enabling interoperability between diverse tech or services. (Log format changer)
+
+image pull policy:
+determine if the container image should be pulled from repo prior starting container. 
+value		description
+always		always pull	if tag is latest
+ifNotPresent	if not exist	(default)
+never		never pull
+
+ImagePullBackOff: status condition occur while pulling image (Authen issue,n/w issue, image not availble,registry rate limit,registry not available etc)
+		To avoid above issue due to auth we can use imagepullsecrets at container level. 
+
+pause container: used to share the n/w namespace among container in pod for internal container communication plus ensure that IP address remains constant in container restart. 
+
+imparative/declarative commands: 
+imparative: command line argument
+	kubectl run web --image=nginx:latest	--dry-run=client	--> shows what API object is being created at client side
+	kubectl get po -o wide/json/yaml				--> shows deployed pods
+	kubectl run web --image=nginx --dry-run=client -o yaml		--> gives you manifest file
+	kubectl run web --image=nginx --label="app=hazelcast,env=prod"	--> label is key value pair
+	kubectl logs -f nginx						--> show pod logs. append -c containername -l key=value(label)	--tail=20 --since=1h
+	kubectl delete po nginx	--force --grace-period=0		--> want to force kill. grace period is 30sec default
+	kubectl edit po nginx						--> can update pod manifest file
+	kubectl exec -it nginx -- command				--> exec command inside pod. if pod has >1 container then use -c containername. -- 										differentiates kubectl commands with actual sh command. 
+	kunectl run curl --image=curlimages/curl -i --rm --restart=never -- curl IP		--> use --rm for temporary pods. 
+
+	kubectl logs/describe (events)/events -n namespace_name		--> used for debugging
+
+decalarative: describing k8s objects in yaml file
+
+Manifest/Spec file:   describe k8s objects in yaml file
+Manifest file has 4 mandatory fields:
+	1. apiVersion
+	2. kind			--> type of resource(deployment,pod,service)
+	3. metadata	
+	4. spec			--> includes replicas,selector,template(spec--> containers) for pod etc
+
+-----man pages--------------
+# list all K8s API supported objects
+kubectl api-resources
+kubectl explain pod
+
+Note: command(ENTRYPOINT) and CMD(arg) in kubenertes. use --command -- <arg> 
+ex: --command ping -- 8.8.8.8
+
+Ephemeral containers: additional container(with debug utilities like bash/sh/curl etc) in pod for debug purpose.  Not restarted when exit or pod removed or restarted.
+	|________> Application container(distroless image)
+
+kubectl debug -it ephemeral-demo<pod name> --image=busybox:1.2 --target=ephemeral-demo		--> create debug container in ephemeral-demo pod
+
 
 
 Self draining K8s node: 
