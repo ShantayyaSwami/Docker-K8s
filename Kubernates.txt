@@ -79,22 +79,11 @@ kubectl	 <---------> API server	<--->	etcd			scheduler		kubelet		docker
 											 <-------------->	
 
 pod : smallest deployable unit that holds and runs the container(one or more).
-deployments/replicasets/replica control: 
-ReplicationController:  is deprecated and has been replaced by ReplicaSets.
-ReplicaSet:  is a lower-level controller that ensures a specified number of replica Pods are running.
-Deployment:  is a higher-level controller that manages ReplicaSets and provides additional features like rolling updates,rollback capabilities etc for deploying and updating applications.
  
 Kubernates cluster:
 kubeadm is a tool that will simplify the process of setting of K8s cluster. 
 install containerd/docker --> install K8s packages (kubeadm,kubelet,kubectl) --> initialize cluster with <sudo kubeadm init --pod-network-cidr range --kubernates-version 1.24.0
 --> setup .kube config command from output for cluster communication --> execute join command on nodes from output --> deploy calico network plugin 
-
-K8s Namespaces: K8s objects such as pods and containers, live in namespaces. Namespaces are the way to separate and organize objects in cluster. or Namespaces provides the mechanism for isolating group of resources within single cluster. 
-4 default namespaces:
-1. default : as name says its default namespace when we create any k8s object
-2. kube-system - user dont have access to it. k8s object such as kubectl, api-server are created under kube-system namespace.
-3. kube-public - publically accessible k8s objects are created user kube-public like Congfigmap, secrete etc
-4. kube-node-lease - contains hear-beats of nodes in k8s cluster + each node has associated least object in namespace + determine availability of nodes
 
 kubectl get namespaces   ---list namespaces
 kubectl get pods --namespace or -n my-namepsace  --list pods from my-namespace if namespace name not given cmd will fetch pods from default namespace
@@ -138,10 +127,11 @@ kubeconfig file: user -->context,namespace --> cluster			--> context does the ma
 context: refers to set of access parameters(cluster server,namespace,user) for kubernetes cluster. used when working with >1 clusters and have diff configurations.
 kubectl config get-contexts/current-context/use-context <context-name> : Display available contexts/current context/Switch to a different context
 
+---------------------------Pods-------------------------
 
 Pod: smallest deployable unit that holds and runs the container(one or more). managed by controler manager. each pod has name and IP. containers within same pod shares same n/w,volume and namespace. pod spec is the YAML file that k8s use to describe about containers inside pod. 
 pod lifecycle
-1. pending: containers not created yet. in the state of downloading container image obver n/w
+1. pending: containers not created yet. in the state of downloading container image over n/w
 2. running: pod is scheduled on node and atleast one container running state.
 3. succeeded: pod exited with status 0 and will not restart
 4. Failed: all containers in pod exited but atleast one with non-zero status
@@ -151,8 +141,8 @@ pod lifecycle
 container lifecycle:(waiting,running,terminated) 
 pod restart policy:
   1. Always  --> default restart policy in K8s. containers always be restarted if they stop, or completed successfully
-  2. On-Failure --> Will restart container only if container process exits with error code or containr detect to be unhealthy by livenes probe. X after successfully completed. 
-  3. Never  --> always cause the pods container to never be restarted. even if container exits or liveness probe fails. 
+  2. On-Failure --> Will restart container only if container process exits with error code or containr detect to be unhealthy by liveness probe. X after successfully completed. 
+  3. Never  --> never be restarted. even if container exits or liveness probe fails. 
 
 multi-container pod design patterns:
 1. Init Containers:are containers that run once during the startup process of pods. Pod can have any number of init containers and they will each run once (in order) to completion. you can use init containers to do variety of startup tasks. They are often useful in keeping main containers lighter and more secure by offloading startup tasks to separate container. (works like bootstrap script)
@@ -187,6 +177,8 @@ imparative: command line argument
 	kubectl logs/describe (events)/events -n namespace_name		--> used for debugging
 
 decalarative: describing k8s objects in yaml file
+kubectl create -f podfile.yml				--> create prod
+kubectl apply  -f podfile.yml				--> update pod	
 
 Manifest/Spec file:   describe k8s objects in yaml file
 Manifest file has 4 mandatory fields:
@@ -207,6 +199,139 @@ Ephemeral containers: additional container(with debug utilities like bash/sh/cur
 	|________> Application container(distroless image)
 
 kubectl debug -it ephemeral-demo<pod name> --image=busybox:1.2 --target=ephemeral-demo		--> create debug container in ephemeral-demo pod
+
+----Labels,annotations and Selectors:
+Labels are key-value pairs attached to the K8s objects like pod. run = <object name> is deafult label
+kubect get po --show-labels
+kubectl label po <podname> env=prod tier=frontend		--> add label to running containers. --overrite if want change existing one. 
+kubectl label po <podname> env-					--> use key- to remove label
+
+labels allows you to identify,select,operate on k8s objects. where as annotations are non-identifying metadata. Annotations can hold any kind of info which can be useful and provide context to DevOps teams. 
+
+kubectl annotate po <podname> key=value
+
+selectors: used to filter K8s objects based on labels. 
+1. equality based selectors (=, !=)		--> used by Replication Controllers, services
+kubectl get po --selector env=prod
+2. set-based selectors	(in,notin,exists())	--> filter keys acccording to set of values. used by ReplicaSets, Deployments,DaemonSets. 
+kubectl get po --selector env in (prod,qa)	
+
+
+--------------------Replica Sets and Replica Controllers-------------(Reliability,Load balancing and scaling)
+ReplicationController:  is deprecated and has been replaced by ReplicaSets. they use equality based selectors. 
+ReplicaSet:  is a lower-level controller that ensures a specified number of replica Pods are running. use set based seletors. 
+
+kubectl get rc/rs
+kubectl delete -f replicaCntroller.yml
+kubectl scale rc/rs nginx-rc/rs --replicas=10
+
+Note: selector must be of same name as defined in pod metadata. otherwise throws error. 
+ReplicaController.yml
+apiVersion:v1
+kind:ReplicaController / ReplicaSet
+metadata:
+  name: nginx-rc
+spec:
+  replica:3
+  selector:
+   app: nginx
+  template:
+    metadata:
+     labels:			matchLabels:			--> here it will be matchLabels(AND operated) which shows set based selector for ReplicaSet. 
+      app: nginx 			app: nginx	           we can use matchExpressions:(OR operated) for multiple selectors
+    spec								       - key: app
+      container:								 operator: In
+      - name: nginx								 values: [nginx,prod]
+        image: nginx
+        port:
+        - containerPort: 80
+
+Note: if we manually create pod with same label as above then ReplicaController/Set terminate manually created pod by thinking Desired abd current pods number is same.  
+
+
+-----------------Deployments and DeploymentController----------
+Deployment:  is a higher-level controller that manages(internally creates) ReplicaSets and provides additional features like rolling updates,rollback,pause and resume update etc for deploying and updating applications.
+Deployment is recommended way to deploy pod(deploymentname+rs-id+hash) or replicaSet. keep track of various deployed versions of apps for rollback. (not the case with ReplicaSet)
+
+kubectl create deploy nginx --replica=5 --image=nginx:latest --port=80
+kubectl get deploy
+kubectl delete deployment nginx
+kubectl rollout status deployment nginx
+kubectl rollout history deplo nginx
+kubectl set image deploy nginx nginx:1.4	--> change image of container.
+kubectl scale deplo nginx --replica=10  
+
+rollout: its a process of gradually deploying or updating your application containers. 
+----deployment strategies:
+1. recreate: old version is terminated and new version is rolled out. easy but expects downtime
+2. Rolling/Ramped update: default strategy. new version is slowly rolled out by replacing old version. default 25% for both
+	1. maxSurge: number of pods created on top of existing ones. 
+	2. maxUnvailable: number of pods down at a time. 
+Note: if maxSurge is 0 then maxUnvailable can't be 0
+3. Blue-Green: initially user traffic goes to Blue(current version) deployment, when new version deployment ready, route traffic to green env.
+having two env and switching between them for updates. 
+4. Canary: testing new version with small group before rollout. 
+5. A/B testing: comparing two versions by exposing diff user to each version. 
+
+
+---------------Namespace----------------------
+K8s Namespaces: K8s objects such as pods and containers, live in namespaces. namespaces provide a way to partition cluster resources between multiple users, teams, or applications. You can use namespaces to create isolated environments. 
+4 default namespaces:
+1. default : as name says its default namespace when we create any k8s object
+2. kube-system - user dont have access to it. k8s object such as kubectl, api-server are created under kube-system namespace.
+3. kube-public - publically accessible k8s objects are created user kube-public like Congfigmap, secrete etc
+4. kube-node-lease - contains hear-beats of nodes in k8s cluster + each node has associated least object in namespace + determine availability of nodes
+
+every resource gets unique name which is combinatin of (resource name + namespace) called FQDN. fully qualified domain name. 
+
+#create namespace: my-namespace.yml
+apiVersion: v1
+kind: namespace
+metadata:
+  name: my-app-namespace
+
+#define resource quota: resource-quota.yml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+ name: my-app-quota
+ namespace: my-app-namespace			--> bad practice to hard code namespace rather pass -n <namespace name> while deployment
+spec:
+ hard:
+   pods:"number"
+   requests.cpu:
+   requests.memory:
+   limit.cpu:
+   limit.memory:
+
+
+kubectl get ns		--> list namespaces
+kubetl delete ns dev	--> very careful while deleting ns. we can assign roles to limit actions 
+kubectl deploy -f specfile.yml -n <namespace name>		--> create deployment in perticular namespace
+
+curl pod-ip.ns.pod.cluster.local		--> to communicate with pod in diff ns using pod-dns
+
+
+---------------------Services--------------------------
+service: single entrypoint which manages backend nodes. pod to pod communication is very difficult without service as containers are not permanent. name and IP gets change if new container gets created. so container can talk to service (virtual object. its not container rather configuraton) which manages the backend nodes(pods).
+
+IP's are stable and balance the load. service identifies its member pods with selector so pod must have labels specified in selector of service. 
+types of service:
+1. ClusterIP: default. assigns stable internal IP to set of pods enabling communication within cluster. 
+2. NodePort:
+3. LoadBalancer
+4. Headless (very imp of stateful apps)
+5. ExternalName
+
+apiVersion:
+kind: Service
+metadata:
+spec:
+  selector:
+  ports:
+  - protocol: 
+    port: incoming port to service
+    targetPort: outgoing port should be same as container port
 
 
 
