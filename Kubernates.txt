@@ -42,7 +42,7 @@ Various node components manage containers on machine & communicate with control 
 
 Kubelet --> k8s agent runs on each node. It communicate with control plane(API server) about state of node and ensures that containers(through CRE i.e containerd or docker) run on its node as instructed by control plane. 
 Kubelets also handles the process of reporting container status and other data about container back to API server. 
-Container Runtime --> is not build into k8s. Its a separate peice of software that is responsible to run comtainer on each machine. K8s supports docker/containerd etc
+Container Runtime --> is not build into k8s. Its a separate peice of software that is responsible to run container on each machine. K8s supports docker/containerd etc
 Kube-Proxy --> is network proxy. It runs on each node and provides networking between containers and services(single entrypoint which manages backend nodes) in the cluster by maintaining iptable.  
 
 CNI: container networking interface maintains the routing rules for container communication inside cluster. 
@@ -219,7 +219,7 @@ kubectl get po --selector env in (prod,qa)
 
 --------------------Replica Sets and Replica Controllers-------------(Reliability,Load balancing and scaling)
 ReplicationController:  is deprecated and has been replaced by ReplicaSets. they use equality based selectors. 
-ReplicaSet:  is a lower-level controller that ensures a specified number of replica Pods are running. use set based seletors. 
+ReplicaSet:  is a lower-level controller that ensures a specified number of replica Pods are running based on desired and current state. use set based seletors. 
 
 kubectl get rc/rs
 kubectl delete -f replicaCntroller.yml
@@ -305,11 +305,11 @@ spec:
    limit.memory:
 
 
-kubectl get ns		--> list namespaces
-kubetl delete ns dev	--> very careful while deleting ns. we can assign roles to limit actions 
+kubectl get ns							--> list namespaces
+kubetl delete ns dev						--> very careful while deleting ns. we can assign roles to limit actions 
 kubectl deploy -f specfile.yml -n <namespace name>		--> create deployment in perticular namespace
 
-curl pod-ip.ns.pod.cluster.local		--> to communicate with pod in diff ns using pod-dns
+curl pod-ip.ns.pod.cluster.local				--> to communicate with pod in diff ns using pod-dns
 
 
 ---------------------Services--------------------------
@@ -318,9 +318,6 @@ service: single entrypoint which manages backend nodes. pod to pod communication
 IP's are stable and balance the load. service identifies its member pods with selector so pod must have labels specified in selector of service. 
 types of service:
 1. ClusterIP: default. assigns stable internal IP to set of pods enabling communication within cluster. 
-2. NodePort:
-3. LoadBalancer
-4. Headless (very imp of stateful apps)
 5. ExternalName
 
 apiVersion:
@@ -332,6 +329,94 @@ spec:
   - protocol: 
     port: incoming port to service
     targetPort: outgoing port should be same as container port
+  type: ClusterIP						--> if not specified then default is ClusterIP
+
+
+kubectl expose deploy web --port=80 --target-port=80 --type=ClusterIP    		--> clusterIp is default so no need to mention
+kubectl get ep web									--> show ist of endpoinds managed by service
+
+Note: Each pods use the information in /etc/resolv.conf to locate the DNS server, and CoreDNS(running in kube-system ns) is the DNS server responsible for resolving service names within the Kubernetes cluster.  kubeproxy maintains the IP table and share those with service. 
+
+service FQDN: servicename.ns.svc(K8s obj).cluster.local
+pods exposed by service gets dns like pod-ip.servicename.ns.svc.cluster.local
+
+port-forwading: used for temp creating connection with pod for debug purpose. pods are not accessible directly from outside world without service expose. 
+kubectl port-forward po/podname localport:podport
+kubectl port-forward po/web 8080:80				--> forward data coming on local port 8080 to pod listening on port 80 
+
+2. NodePort: exposing service on static port n each node, allowing external access to service. 
+port must be in the raneg of 30000-32767. its recommended to et K8s auto assign the port. NodePort uses the labels and selectors as ClusterIP
+
+spec:
+  selector:
+  ports:
+  - protocol: 
+    port: incoming port to service
+    targetPort: outgoing port should be same as container port
+    nodePort: let K8s auto assign
+  type: NodePort
+
+drawback: exposing service through nodeport uses multiple IPs and corresponding node port makes it difficult for end user to access apps makes it user unfriendly.
+solution: Deploy HAProxy outside the cluster and configure it to balance traffic to the nodes using their NodePort.
+
+
+3. LoadBalancer: is a way to expose services to the external world. When you create a service with type LoadBalancer, the cloud provider (if you're using a cloud-managed Kubernetes service) automatically provisions a load balancer and assigns it a public IP address. it internally creates nodeport. Load balancer accepted request on its static IP and forward request to nodeport on nodeport IP and port number.  
+
+drawback: It can incur additional costs, especially in cloud environments where public IP addresses and load balancers are billable resources.
+solution: Ingress controller with LB -> allow you to expose multiple services through a single load balancer and public IP address. 
+load balancer sharing -> share a single load balancer among multiple services, reducing the number of provisioned IP addresses.
+
+
+4. Headless Service(no IP allocated): (very imp for statefulset apps) It is used when you don't need a single, stable IP address for the service, and you want to directly reach individual pods backing the service.The service creates DNS records for each pod backing the service, allowing you to discover individual pod IPs using DNS. commonely used in database clusters, statefulsets etc
+
+apiVersion:v1
+kind: Service
+metadata:
+ name: my-headless-service
+spec:
+  ClusterIP: None
+  ports:
+  - protocol: tcp
+    port: 80
+
+Note: If we do nslookup on healess service FQDN then it resolves to backend pods Ip address.
+nslookup my-headless-service.default.svc.cluster.local			--> gives backend pods IP's. each pod gets unique identity like podname.headless-servicename
+
+
+External IP: it's a feature that you can use in combination with other service types to assign an external IP address to a service. 
+spec:
+  selector:
+  ports:
+  - protocol: 
+    port: incoming port to service
+    targetPort: outgoing port should be same as container port
+    nodePort: let K8s auto assign
+  type: NodePort
+  externalIPs:
+  - 203.0.103.1
+
+
+Services without pods: selectors from service used to connect to endpoints. but service without selector does not create endpoints so we manually create endpoints (like aws rds Ip:port)
+The Endpoints resource in K8s is used to associate a service with a set of network addresses. 
+
+apiVersion: v1
+kind: Service
+metadata:
+ name: headless-service
+spec:
+ ClusterIP: None
+---
+apiVersion: v1
+kind: Endpoint
+metadata:
+ name: my-headless-endpoint
+spec:
+ - addresses:
+    - 201.0.102.1						--> it can be external apps IP address which can be connected from K8s cluster. 
+   ports:  
+    - 5000
+
+----------------------------------------------------------
 
 
 
