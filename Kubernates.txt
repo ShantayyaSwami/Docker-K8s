@@ -383,7 +383,7 @@ Note: If we do nslookup on healess service FQDN then it resolves to backend pods
 nslookup my-headless-service.default.svc.cluster.local			--> gives backend pods IP's. each pod gets unique identity like podname.headless-servicename
 
 
-External IP: it's a feature that you can use in combination with other service types to assign an external IP address to a service. 
+External IP: The externalIPs feature is not primarily designed for managing external IP addresses of services, especially for external databases or external applications hosted outside the K8s cluster. Instead, it's used to assign specific external IP addresses to services within the Kubernetes cluster itself.
 spec:
   selector:
   ports:
@@ -415,6 +415,24 @@ spec:
     - 201.0.102.1						--> it can be external apps IP address which can be connected from K8s cluster. 
    ports:  
     - 5000
+
+
+
+ExternalName: it helps to connect to teh service running outside of K8s cluster through mapping Service to dns name. IP address not allowed. 
+
+apiVersion: V1
+kind: Service
+metadata:
+ name: patment-gateway
+Spec:
+  type: ExternalName
+  externalName: payment-gateway-api.external-provider.com
+
+
+Ingress Controller: It is responsible for managing external access to services within the cluster. It allows you to define rules for routing external HTTP and HTTPS traffic to different services based on the host, path, or other criteria.
+1. Nginx Ingress
+2. Traefik Ingress
+3. HAProxy
 
 ----------------------------------------------------------
 
