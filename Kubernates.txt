@@ -146,8 +146,54 @@ pod restart policy:
   3. Never  --> never be restarted. even if container exits or liveness probe fails. 
 
 multi-container pod design patterns:
-1. Init Containers:are containers that run once during the startup process of pods. Pod can have any number of init containers and they will each run once (in order) to completion. you can use init containers to do variety of startup tasks. They are often useful in keeping main containers lighter and more secure by offloading startup tasks to separate container. (works like bootstrap script)
-2. Sidecar: its an auxiliary container thats runs alongside and complements main app container. it does additional functionalities like logging,monitoring,security etc
+It is not adviced to burden the main application with additinal responsibilties like logging,monitoring,conneting to dB etc.keeping the image as small as possible to reduce attack surface. 
+1. Init Containers:Init containers are exactly like other containers except they always run to completion. init containers must complete successfully before next one starts. if pods init container fails K8s repeatadly restarts the pod untill init container succeeds. if restart policy set to Never then K8s treat overall pod as failed. you can use init containers to do variety of startup tasks. They are often useful in keeping main containers lighter and more secure by offloading startup tasks to separate container. (works like bootstrap script)
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: init-container-pod
+spec:
+  initContainers:
+  - name: init
+    image: busybox:latest
+    command: ["/bin/sh", "-c"]
+    args: ["i=10; while [ $i -ge 0 ]; do echo $i; sleep 0.5; i=$(expr $i - 1); done"]
+  containers:
+  - name: main-container
+    image: busybox:latest
+    command: ["/bin/sh", "-c"]
+    args: ["echo 'Hello from main container'"]
+
+
+
+2. Sidecar: sidecar pattern uses the helper container to enhance or extend the functionality of main container. it does additional functionalities like logging,monitoring,security etc. failures in sidecar will not impact main container.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sidecar-pod
+spec:
+  volumes:
+  - name: temp
+    emptyDir: {}
+
+  containers:
+  - name: side-car
+    image: busybox:latest
+    command: ["/bin/sh"]
+    args: ["-c", "while true; do echo 'This is from $(hostname)' >> /var/log/index.html; sleep 1; done"]
+    volumeMounts:
+    - name: temp
+      mountPath: /var/log
+
+  - name: application
+    image: nginx
+    ports:
+    - containerPort: 80
+    volumeMounts: 
+    - name: temp
+      mountPath: /usr/share/nginx/html
+
 3. Ambassador: proxy pattern. acts as gateway or mediator for n/w communication. often handling tasks such as routing,load balancing etc.
 4. Adaptor: serves as translator between diff components. plays crutial role in enabling interoperability between diverse tech or services. (Log format changer)
 
