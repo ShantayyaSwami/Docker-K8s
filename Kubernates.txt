@@ -1,4 +1,5 @@
 kubectl version --short
+Skooner: K8s dashboard
 Container orchestration automates the deployment,management,scaling and networkng of containers across the cluster. it focus on managing the lifecycle of containers. 
 K8s  -> open-source platform for managing containarized workload and services. 
 
@@ -186,6 +187,7 @@ Manifest file has 4 mandatory fields:
 	2. kind			--> type of resource(deployment,pod,service)
 	3. metadata	
 	4. spec			--> includes replicas,selector,template(spec--> containers) for pod etc
+            default-container: <container name> 				--> if pod has multiple containers
 
 -----man pages--------------
 # list all K8s API supported objects
@@ -429,13 +431,87 @@ Spec:
   externalName: payment-gateway-api.external-provider.com
 
 
-Ingress Controller: It is responsible for managing external access to services within the cluster. It allows you to define rules for routing external HTTP and HTTPS traffic to different services based on the host, path, or other criteria.
+Ingress Controller: It is responsible for managing external access to services within the cluster. It allows you to define rules for routing external HTTP and HTTPS traffic to different services based on the host, path, or other criteria.it can be deployed through Helm charts, YAML manifests, or other deployment tools.
+Make sure to deplo ingress controller before use ingress resource. 
 1. Nginx Ingress
 2. Traefik Ingress
 3. HAProxy
 
-----------------------------------------------------------
+---Ingress rules----
+Ingress exposes HTTP and HTTPS  routes from outside the cluster to services within cluster. Traffic routing is controlled by rules defined in Ingress resource.
+Ingress resource cannot do on its own. We need to have Ingress controller  in order for ingress resource to work through ingress class.  
 
+Note: Reverse proxy and Ingress controller basic difference is ingress controller can dynamically reload configurations which is not the case with Reverse proxy. 
+ 
+----Nginx Ingress-----
+It acts as a load balancer and handles the routing of incoming requests to different services within the cluster.
+
+----------Traefik ingress--------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-name
+spec:
+  ingressClassName: nginx  # Specify the Ingress controller type here (e.g., nginx, HAProxy, traefik)
+  rules:
+    - host: domain-name								# host/name based routing	
+      http:
+        paths:
+          - path: /path1							# path based routing
+            pathType: Prefix							# exact or prefix
+            backend:
+              service:
+                name: path1-service-name  # Specify the service name
+                port:
+                  number: 80
+          - path: /path2
+            pathType: Prefix
+            backend:
+              service:
+                name: path2-service  # Specify the service name
+                port:
+                  number: 80
+
+
+----------------------------------K8s Volumes------------------------------
+volume is dir accessible to all containers running in pod. containers are ephemeral so to persist the data, K8s provide volumes. 
+Ephemeral volumes: 
+1. emptyDir(pod): temp storage created and managed by the lifecycle of pod. volume is empty on pod creation and volume gets deleted when pod stopped,rescheduled etc
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod
+spec:
+  containers:
+  - name: example-container
+    image: nginx:latest
+    volumeMounts:
+    - name: temp-volume					#same volume can be mount by multiple containers. 
+      mountPath: /data
+  volumes:
+  - name: temp-volume
+    emptyDir: {}
+
+
+2. hostPath(node): The hostPath volume allows a pod to use a file or directory on the host machine as storage. if pod gets rescheduled to other node then directory or file gets created on that particular node from scratch. if same path exist then pod use the same. 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hostpath-pod
+spec:
+  containers:
+  - name: container1
+    image: nginx:latest
+    volumeMounts:
+    - name: hostpath-volume
+      mountPath: /data
+  volumes:
+  - name: hostpath-volume
+    hostPath:
+      path: /path/on/host
+      type: File or Directory or FileorCreate or DirectoryorCreate
+
+------------------------------------
 
 
 Self draining K8s node: 
