@@ -194,7 +194,8 @@ spec:
     - name: temp
       mountPath: /usr/share/nginx/html
 
-3. Ambassador: proxy pattern. acts as gateway or mediator for n/w communication. often handling tasks such as routing,load balancing etc.
+3. Ambassador: proxy pattern. acts as gateway or mediator for n/w communication. often handling tasks such as routing,load balancing etc. handles requests/responses from/ to remote services or external services. 
+
 4. Adaptor: serves as translator between diff components. plays crutial role in enabling interoperability between diverse tech or services. (Log format changer)
 
 image pull policy:
@@ -229,7 +230,7 @@ kubectl apply  -f podfile.yml				--> update pod
 
 Manifest/Spec file:   describe k8s objects in yaml file
 Manifest file has 4 mandatory fields:
-	1. apiVersion
+	1. apiVersion		--> kubectl api-resources 
 	2. kind			--> type of resource(deployment,pod,service)
 	3. metadata	
 	4. spec			--> includes replicas,selector,template(spec--> containers) for pod etc
@@ -347,9 +348,9 @@ metadata:
 spec:
  hard:
    pods:"number"
-   requests.cpu:
-   requests.memory:
-   limit.cpu:
+   requests.memory:					Mi --> Mebibytes (more than megabyte 10^6 its decimal unit sotrage but computer understand in binary unit which
+   requests.cpu:					is 2^20 little more han megabyte					
+   limit.cpu:						m --> millicore
    limit.memory:
 
 
@@ -557,7 +558,166 @@ spec:
       path: /path/on/host
       type: File or Directory or FileorCreate or DirectoryorCreate
 
-------------------------------------
+----------------K8s Environment variables-----------
+Env variables in K8s can be of key-value pairs, ConfigMaps or Secrets. Refer them using env or envFrom keys. 
+
+#plain text
+env:
+ - name: DB_NAME
+   value: "postgres"
+
+kubectl run -it test --env="APP=test" --image=busybox-alpine --rm -- printenv
+
+Note: to inject pod's data as containers env variable
+env:
+ - name: POD_NAME							--> use ["$(POD_NAME)"] to print env variable in containers in args
+   valueFrom:
+     frieldRef:
+       fieldPath: metadata.name
+ - name: POD_IP
+   valueFrom:
+     fieldRef:
+       fieldPath: status.hostIP
+         
+
+---configMap--------
+provide file as configuration. A configMap used to store tha non-confidential data in key-value pairs. pods can consume  ConfigMaps as 
+1. Env variables
+2. command line args
+3. Configuration file in volumes. 
+
+But if configuration have sensitive info then use secrets. configmap is namespaced obj. unlike env var, if these files(mounted as configmap) changes then new file pushed (eventualy consistent) to runnng pods without need of pod restart
+
+kubectl create configmap (cm) app-config --from-literal=BACKEND_COLOR=blue
+kubectl create cm app-config --from-file=./myconfig				--> here myconfig file name will be key and file content wil be value when use file
+
+Note: cm has data field instead of spec in configMap manifest file. when we provide file as configuration then filename wil be key and its content will be value but its of no use so mount file as configMap and use it.
+If we use configMap inside pod then configMap must be available otherwise pod will fail due to dependancy.  
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db_details
+data:
+  db_name: mysql
+  db_host: mysql.wolrdpay.local
+  db_env: prod
+---
+env:						--> using config map as env variable
+  - name: DB_NAME
+    valueFrom:
+      configMapKeyRef:
+        name: db_details
+        key: db_name
+envFrom:					--> if want to refer all variables from configmap
+- configMapRef:
+    name: db_detais
+
+
+---to mount configMap file 
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+data:
+  custom-nginx.conf: |
+    # custom-nginx.conf
+    server {
+        listen 80;
+        server_name localhost;
+
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+        }
+    }
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-pod
+spec:
+  containers:
+  - name: nginx-container
+    image: nginx:latest
+    volumeMounts:
+    - name: nginx-config-volume
+      mountPath: /etc/nginx/conf.d/
+  volumes:
+  - name: nginx-config-volume
+    configMap:
+      name: nginx-config
+      items:						--> used to rename file to new name
+      - key: custom-nginx.conf						
+        path: nginx.conf
+
+
+-----Secrets--------
+Secret is K8s obj used to store confidential data like pass,ssh key, tokens etc. same as configMap but specifically intended to hold confidential data.
+Pods can consue secrets as
+1. Env var
+2. configuration file in volume
+3. pull secrets by kubelet
+
+Note: secrets are stored unencrypted (base64 encoded) in etcd. anyone with API access update it so use RABC to restrict users. while creating secrets through yaml put base64 values. 
+
+secret types:
+1. generic (Opaque)
+2. tls
+3. docker-registry
+
+kubectl create secret generic my-opaque-secret --from-literal=username=my-username --from-literal=password=my-password
+kubectl create secret tls tls-secret --cert=path/to/tls-certificate-file --key=path/to/tls-private-key-file
+kubectl create secret docker-registry registry-secret --docker-server=my-registry.io --docker-username=my-username --docker-password=my-password 
+
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db_credentials
+data:
+  DB_USER: base64 encoded value
+  DB_PASS: base64 encoded value
+---
+env:
+  - name: DB_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: db_credentials
+        key: DB_USER
+or
+envFrom:					--> use all keys from secret
+- secretRef:
+    name: db_credentials 
+
+--------------------------------------Manual scheduling------------------
+manual scheduling is sometimes needed  to ensure that certain pods only scheduled on nodes with specialized hardware like ssd or to co-locate services to communicate frequently (DB-apps pods to reduce latency)
+K8s offer several ways to schedule pods
+1. nodeName: 
+simplest form but due to limitations not used. 
+apiVersion: v1
+kind: pod
+metadata: 
+  name: nginx
+spec:
+ containers:
+ - name: nginx
+   image: nginx:latest
+   ports:
+   - containerPort: 80
+ nodeName: minikune-04
+
+limitations: if node does not exist or node does not have enough resources or nodes in cloud are unpredictable 
+ 
+2. nodeSelector: 
+its same as nodeName however node selector use labels to assign pod on node. limitation is if node does not have label then pod fails.sets hard rules. 
+
+3. Node affinity and anti-affinity:
+
+4. Inter-pod affinity and anti-affinity
+5. Taints and toleration
+
+ 
 
 
 Self draining K8s node: 
