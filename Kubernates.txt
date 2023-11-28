@@ -717,7 +717,232 @@ its same as nodeName however node selector use labels to assign pod on node. lim
 4. Inter-pod affinity and anti-affinity
 5. Taints and toleration
 
- 
+
+----------------Resource limits----------------
+By defauld, Pods run with unbounded CPU and Memory limits. Resource limits prevents single app from using all available resources and protect otehr apps from resource starvation.
+Request and Limits are set for each container. 
+Request: what container is gauranted to get	Limits: What container should never exceed  
+
+memory: base unit is bytes (mebibytes) if exceeds memory limit then OOM error and container gets killed
+CPU: base units are cores. (1 CPU equal to 1000 millicore) if exceeds cpu limit then apps get throttled. (gives worst performance but not get killed) 
+
+Note: Its duty of scheduler to provide node with requested resources otherwise pod will be in pending state. if only limit specified then request will be limit value. 
+
+Metrics server: collects and exposes resource usage metrics from the cluster nodes and pods.
+kubectl top pod
+kubectl top node
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod
+spec:
+  containers:
+  - name: my-container
+    image: nginx:latest
+    resources:
+      requests:
+        memory: "64Mi"   # Requested memory
+        cpu: "250m"      # Requested CPU
+      limits:
+        memory: "128Mi"  # Maximum memory allowed
+        cpu: "500m"      # Maximum CPU allowed
+
+
+------ReqsourceQuota object is applied on namespace------
+ResourceQuota is not limited to cpu,memory limits rather its applied for pod,svc,deployments,pvc etc
+
+#create namespace: my-namespace.yml
+apiVersion: v1
+kind: namespace
+metadata:
+  name: my-app-namespace
+
+#define resource quota: resource-quota.yml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+ name: my-app-quota
+ namespace: my-app-namespace			--> bad practice to hard code namespace rather pass -n <namespace name> while deployment
+spec:
+ hard:
+   pods:"number"
+   requests.memory:					Mi --> Mebibytes (more than megabyte 10^6 its decimal unit sotrage but computer understand in binary unit which
+   requests.cpu:					is 2^20 little more han megabyte					
+   limit.cpu:						m --> millicore
+   limit.memory:
+
+Note: If you set resourceQuota for namespace then all the pods need to set the resources in the container definition therwise pod will not be scheduled. 
+drawback: obj created within defined namespace can still utilize all available resources starving others. --> LimitRange can overcome this problem by setting min&max limit on obj level in namespace. 
+
+---LimitRange-------
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: example-limit-range
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: "500m"          # Default CPU limit for a container (millicores)
+      memory: "500Mi"      # Default memory limit for a container (mebibytes)
+    max:
+      cpu: "2000m"         # Maximum CPU allowed for a container (millicores)
+      memory: "2000Mi"     # Maximum memory allowed for a container (mebibytes)
+    min:
+      cpu: "200m"          # Minimum CPU required for a container (millicores)
+      memory: "200Mi"      # Minimum memory required for a container (mebibytes)
+  defaultRequest:
+    cpu: "100m"            # Default CPU request for a container (millicores)
+    memory: "100Mi"        # Default memory request for a container (mebibytes)
+
+
+-----------------------------K8s Network Policies--------------------https://orca.tufin.io/netpol/ --> policy viewer
+Implementing n/w policies critical part of building K8s platform. In K8s by default all pods are non-isolated means ingress and Egress traffic allowed . pods can be isolated by applying n/w policies using ingress rules (like Security Groups)
+N/w policies functionality is provided and implemented by network plugins like Calico,Cilium,Flannel,Weavenet etc.
+
+Note: unless you have n/w plugin that implement n/w policy, you will not be able to use functionality. 
+1. N/w policies are namespace scoped.
+2. Policies are applied to pods using label selector. 
+3. If we use NetworkPolicy obj then all traffic is blocked unless specify rules
+
+N/w policy = NetworkPolicyPeer + NetworkPolicyPort
+
+Peer					      port and Protocol
+IP Block-------------------------------------->  
+pod from diff ns -------Inress traffic-------->  
+pod selector (same ns) ----------------------->  POD
+nameSpace selector ---------------------------> 
+
+network policy definition comprise of:
+1. Pod selector : based on lebels. 
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metdata:
+  name: value
+spec:
+  podSelector: {}				--> empty {} podSelector selects all pods in ns.
+  or
+  podSelector:
+    matchLabels:
+      app: example-app			--> label
+
+2. Policy Type: Ingress/Egress
+3. Ingress Block
+ingress: 				--> [] shows all traffic blocked
+ - from: 
+    - ipBlock:
+        cidr: <ip/range>
+        except: <ip/range>
+    - namespaceSelector:
+	matchLabels:
+           key: value
+    - podSelector:
+        matchLabels:
+           key: value
+   ports: 
+    - protocol:
+      port: 
+4. Egress Block
+ egress: 				--> [] shows all outgoing traffic blocked
+ - to: 
+    - ipBlock:
+        cidr: <ip/range>
+        except: <ip/range>
+    - namespaceSelector:
+	matchLabels:
+           key: value
+    - podSelector:			--> remove - from podSelector to allow perticular pod from different namespace
+        matchLabels:
+           key: value
+   ports: 
+    - protocol:
+      port: 
+
+here we are only allowing traffic to pod with db label but when pod want to talk to other pod with db label , it has to talk to service first and service name to ip reesolution happens through kube-dns service (core-dns pod) under kube-system ns but we have not inlcuded any rule for pod to talk to kube-system ns pods. so its egress rule fail. below rule make egress to work:
+ egress: 				
+ - to: 
+    - namespaceSelector:
+	matchLabels:
+           kubernetes.io/metadata-name: kube-system
+    - podSelector:			
+        matchLabels:
+           app: db
+   ports: 
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 80
+
+-------------------------------------
+
+Static pod --> A pod directly managed by kubelet on the node ( created in manifest location on worker node /etc/kubenetes/manifests/)  but not by K8s API server. They can run even if there is not any K8s API server. all control-plane components run as static pods. 
+Kubelets automatically creates static pods from YAML manifest files (kept in /etc/kubenetes/manifests/) on master/worker node. 
+kubectl get po  --> shows <podname>-master-node			--> identify static pods 
+
+Mirror pod ---> Kubelet will create a mirror pod  for each static pod. Mirror pod allow you to see the status of Static pods via K8s API , but you cannot change 
+or manage them via API server. 
+you cannot delete static pod by running kubectl delete. to delete it remove yaml file from manifest location. 
+
+DaemonSet(kind) --> Makes sure that each pod replica running on each node. Automatically runs a copy of pod on each node. DaemonSet will run copy of pod on new node when they are added to the cluster. DaemonSet normally respect scheduling rules around nodeLabels, taints and tolerations. If pod would not normally schedule on node, daemonSet will not create copy of pod on that node.
+
+ex: cluster storage daemon on each node: ceph,glusterd
+log collection agent daemon: fluentd,logstash
+node monitoring agent daemon: node exporter(prometheus), collectd
+
+K8s Jobs:
+Job is k8s resource that generally used for large computation and batch tasks. all jobs create one or more pods and are run to completion(exit with 0 status code) 
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: example-job
+spec:
+  parallelism: 2			---> number of pods to run concurrently
+  completions: 4			--> desired number of successfully completed pods before considering the job as succeeded
+  backoffLimit: 3			--> maximum number of retries before considering the job as failed
+  ttlSecondsAfterFinished: 60		--> amount of time to retain completed pods after the Job has finished. jobs will not delete automatically
+  template:
+    metadata:
+      name: example-pod
+    spec:
+      containers:
+      - name: example-container
+        image: busybox:alpine
+        command: ["/bin/sh"]
+        args:
+        - "-c"
+        - "num=$((RANDOM % 10)); if [ $num -eq 0 ]; then echo 'positive'; exit 0; else echo 'negative'; exit 1; fi"
+  restartPolicy: OnFailure/Never
+
+
+CronJob: similar to a Job but adds the ability to schedule periodic or recurring tasks.
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: example-cronjob
+spec:
+  schedule: "*/1 * * * *"  # Run every minute
+  successfulJobsHistoryLimit: 3			-->  number of completed jobs to keep in history. 
+  failedJobsHistoryLimit: 1			--> number of failed jobs to keep
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: example-app
+        spec:
+          containers:
+          - name: example-container
+            image: busybox:alpine
+            command:
+            - "/bin/sh"
+            args:
+            - "-c"
+            - "echo Hello from the CronJob!"
+
+-----------------------------------
+
 
 
 Self draining K8s node: 
@@ -811,13 +1036,6 @@ K8s scheduling --> The process of assigning pods to nodes so kubelets can run th
 you can also use nodeName to assign specific pod to node directly and bypass scheduling.
 kubectl label nodes <nodename> special=true   ---> assigning special=true label to node
 
-DaemonSet --> Automatically runs a copy of pod on each node. DaemonSet will run copy of pod on new node when they are added to the cluster. DaemonSet normally respect 
-scheduling rules around nodeLabels, taints and tolerations. If pod would not normally schedule on node, daemonSet will not create copy of pod on that node.
-
-Static pod --> A pod directly managed by kubelet on the node ( created in menifest location on worker node)  but not by K8s API server. They can run even if there is not any K8s API server. 
-Kubelets automatically creates static pods from YAML menifest files on worker node. 
-Mirror pod ---> Kubelet will create a mirror pod  for each static pod. Mirror pod allow you to see the status of Static pods via K8s API , but you cannot change 
-or manage them via API server. 
 
 
 K8s Deployments: K8s object that defines a desired state for replicaSet(A set of replica pods). Deployment controller seeks to maintain desired state creating,
