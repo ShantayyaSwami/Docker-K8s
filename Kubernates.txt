@@ -366,8 +366,7 @@ service: single entrypoint which manages backend nodes. pod to pod communication
 
 IP's are stable and balance the load. service identifies its member pods with selector so pod must have labels specified in selector of service. 
 types of service:
-1. ClusterIP: default. assigns stable internal IP to set of pods enabling communication within cluster. 
-5. ExternalName
+1. ClusterIP: default. assigns stable internal IP to set of pods enabling communication within cluster. ClusterIP services are often used for read-heavy operations.
 
 apiVersion:
 kind: Service
@@ -416,7 +415,10 @@ solution: Ingress controller with LB -> allow you to expose multiple services th
 load balancer sharing -> share a single load balancer among multiple services, reducing the number of provisioned IP addresses.
 
 
-4. Headless Service(no IP allocated): (very imp for statefulset apps) It is used when you don't need a single, stable IP address for the service, and you want to directly reach individual pods backing the service.The service creates DNS records for each pod backing the service, allowing you to discover individual pod IPs using DNS. commonely used in database clusters, statefulsets etc
+4. Headless Service(no IP allocated): (very imp for statefulset apps) It is used when you don't need a single, stable IP address for the service, and you want to directly reach individual pods backing the service(pod-pod communication).The service creates DNS records for each pod backing the service, allowing you to discover individual pod IPs using DNS. commonely used in database clusters, statefulsets etc
+Use case: Headless services are often used for scenarios where direct communication with individual pods is necessary, such as in StatefulSets for databases.
+Headless service still provide load balancing across pods through DNS round robin mechanism instead of service proxy.
+Headless services are often used for write-heavy operations.
 
 apiVersion:v1
 kind: Service
@@ -874,7 +876,7 @@ here we are only allowing traffic to pod with db label but when pod want to talk
     - protocol: TCP
       port: 80
 
--------------------------------------
+-------------------------------------Static Job--CronJob--daemonSet-------------
 
 Static pod --> A pod directly managed by kubelet on the node ( created in manifest location on worker node /etc/kubenetes/manifests/)  but not by K8s API server. They can run even if there is not any K8s API server. all control-plane components run as static pods. 
 Kubelets automatically creates static pods from YAML manifest files (kept in /etc/kubenetes/manifests/) on master/worker node. 
@@ -941,7 +943,137 @@ spec:
             - "-c"
             - "echo Hello from the CronJob!"
 
------------------------------------
+
+Probes: are mechanisms used to determine the health of a container. 3 types
+1. Liveness Probe: Checks whether the container is still running. If the liveness probe fails, K8s restarts the container.
+
+2. Readiness Probe: Determines whether the container is ready to serve traffic. If the readiness probe fails, the container is removed from the service endpoints, and traffic is not directed to it.
+
+3. Startup Probe: Similar to the liveness probe, but it only runs during the initial startup of a container. It is used to delay the liveness and readiness probes until a container has performed some necessary initialization.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe-example
+spec:
+  containers:
+  - name: my-container
+    image: nginx:latest
+    livenessProbe:			--> can be readinessProbe/startupProbe
+      httpGet:				--> can be exec,tcpSocket,Grpc etc
+        path: /healthz
+        port: 80
+      initialDelaySeconds: 3		--> number of seconds k8s should wait before starting the liveness probe
+      periodSeconds: 3			--> Specifies the period (in seconds) at which the liveness probe should be performed. every 3 sec
+      
+
+----------------------Persistent Volumes----------------------------
+With persisted volume(PV) data is persisted regardless of apps lifecycle container. pod,node or even cluster itself. 
+PV consiste of 2 things
+1. backend storage called persistentVolume: 
+   2 ways to provision as Persistent Volume. 
+	1. Static: manually created by admin
+ 	2. Dynamic: cluster creates pv based on storageClassName(backend storage. i.e ebs,efs or nfs etc) for pvc. if not given then K8s use deafult storageClasses. 
+2. access mode --> how the volume should be mounted. 
+	1. ReadWriteOnce: Only single worker node can mount at a time. >1 pod from same node can RW.  
+	2. ReadOnlyMany: can be mounted as read only by many nodes at a time
+	3. ReadWriteMany: can be mounted as read write by many nodes at a time. 
+
+PVC: PersistentVolumeClaim (PVC) is an abstraction that represents a request for storage by a user or a pod. It allows users to request specific resources in terms of storage, and it decouples the definition of storage requirements from the underlying storage implementation.
+each claim can request size and access modes. 
+
+Reclaim Policy(persistentVolumeReclaimPolicy): tells us what happens to PV when PVC is deleted. 
+1. delete: deletes volume content and makes volume available to be claimed agan by other pvc  				--> default if not specified
+2. Retain: PV content is persisted even after pvc deleted. it can't be reused until admin manually reclaim it. 
+
+volume Binding mode:
+1. Immediate: provisioned pv and bind immediately once PVC created
+2. WaitForFirstConsumer:  delay provisioning and binding of pv until pod using pvc created. 
+
+Note: PVC and PV has one-one mapping. 
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: my-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+spec:
+  containers:
+  - name: my-container
+    image: my-image
+    volumeMounts:
+    - name: my-storage
+      mountPath: /app/data
+  volumes:
+  - name: my-storage
+    persistentVolumeClaim:
+      claimName: my-pvc
+
+Note: When you create the PVC, and if a matching StorageClass is specified, K8s looks for a provisioner associated with that StorageClass.
+The provisioner dynamically provisions a new PersistentVolume with the requested capacity,access modes,binding mode etc"
+
+---------------------Auto Scaling------------------
+Horizontal Pod Autoscaler (HPA): Automatically adjusts the number of replicas in a deployment or replica set based on observed metrics.
+various metrics types:
+1. Resource metrics: Scale based on cpu or memory utilization
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nginx-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment					
+    name: nginx-deployment
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu/memory
+      target:
+        type: Utilization
+        averageUtilization: 50
+
+2. Customm metrics
+3. External metrics: Deploy an external metrics provider that can expose external metrics to K8s.
+4. Pod-based metrics
+5. Object metrics
+
+Scaling Policies:
+Target Utilization: scale to % CPU utilization
+Target Value:  scale t target metric value (e.g., maintain 100 requests per second).
+Average Value: Scale to achieve an average value across multiple pods.
+ 
+VPA: Automatically adjusts the resource requests of individual pods.
+
+------------------------StatefulSets--------------------
+Headless services are mainly used to connect to database cluster However, in headless service if pods gets restaretd then their IP's and DNS(which also includes IP's like IP.service.ns.svc.cluster.local) also get changed so it will be challenging job to connect to dedicated backend pod.
+
+we can use statefulSets plus headless service to fix the above issue where pods in statefulsets gets stable DNS 
+
 
 
 
