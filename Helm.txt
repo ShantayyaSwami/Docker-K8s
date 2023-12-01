@@ -1,0 +1,42 @@
+K8s is powerful tool however few challenges hampers its adoption
+1. Deployment complexity: 
+order of resource deployment (pod,ns,cm etc). due to dependency order deployment will fail
+2. Applicatio versioning and rollback :
+rollback is difficult due to K8s not provide built-in mechanism for apps versioning
+3. reusability and sharability:
+Reusing configurations across different environments is difficult due to different config need tweak according to env. 
+
+Helm: 
+Its a tool which manages the K8s based applications by providing standard approach as helm charts(tar -> collection of YAML files). its package manager for k8s.
+Helm can:
+1. install software
+2. auto install software dependancies
+3. Upgrade software
+4. configure software deployments
+5. fetch soft pkgs from soft repo called chart repo (chart museum)
+
+		package manager		packages
+system		apt			deb
+		yum			rpm
+Development	maven			jar/jav artifacts
+		npm			node modules
+		pip			python packages
+K8s		helm			charts
+
+example: 
+system				K8s
+apt install nginx		helm install <release-name> bitnam/nginx
+apt uprade			helm upgrade <release-name> bitnam/nginx
+
+why helm is popular:
+1. Hiding complexity of running multiple YAML files to deploy apps. run single command that install all YAML files at once. 
+2. one click install/upgrade/rollback apps
+3. same charts reusable for multi env. 
+
+
+why helm is not:
+1. its not system package manager.
+2. configuration management tool (ansible,shef,puppet etc)
+3. K8s resource lifecycle controller 
+4. version control system 
+
