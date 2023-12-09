@@ -4,7 +4,7 @@ order of resource deployment (pod,ns,cm etc). due to dependency order deployment
 2. Application versioning and rollback :
 rollback is difficult due to K8s not provide built-in mechanism for apps versioning
 3. reusability and sharability:
-Reusing configurations across different environments is difficult due to different config need tweak according to env. 
+Reusing configurations across different environments is difficult due to different end need diff config. 
 
 Helm: 
 Its a tool which manages the K8s based applications by providing standard approach as helm charts(tar -> collection of YAML files). its package manager for k8s.
@@ -95,17 +95,17 @@ chart create example-chart				--> create chart template
 2. chart.yaml: Holds metadata about chart, such as chart name, version, maintainer info,search keyword etc. 
 3. charts: dir which stores other charts that main chart depends on. 
 4. Values.yaml: holds all the values to be injected into template. Templates are rendered into K8s manifest files. 
-5. Values.schema.json: vaidates values.yaml file. removing any required fields will result in error as JSON schema validation fails. This check happens everytime we run 
+5. Values.schema.json: validates values.yaml file. removing any required fields will result in error as JSON schema validation fails. This check happens everytime we run 
 helm install/upgrade/template
 6. Templates: Holds the actual manifest to be deployed with chart. i.e deployment.yaml,service.yaml,config.yaml and secrets.yaml all in the templated format. this wil all get values from values.yaml file. 
 7. LICENSE: a plaintext license for the chart
-8. NOTES.txt file: prints on command line when the chart is installed. 
+8. NOTES.txt file: prints on command line when the chart is installed. like help menu for clients.  
 9. _helpers.tpl: handles templates
 10. README.md: A readme file with information for users of the chart. 
-11. requirements.yaml: A YAML file that lists the chart dependancies. 
+11. requirements.yaml: A YAML file that lists the chart dependancies. 					--> removed and now dependancy mentioned in chart.yaml
 
 ---chart dir structure contains----
----1. charts					--> dir used contain other charts for dependancy management. 
+---1. charts					--> dir contain other charts for dependancy management. sub-charts with same template structure. 
 ---2. chart.yaml				--> contains metadata of chart like name of chart,version of chart,apps,dependancies,sources etc
 ---LICENSE
 ---README.md
@@ -115,7 +115,7 @@ helm install/upgrade/template
    |_______helpers.tpl
    |_____hra.yaml
    |____ingress.yaml
-   |___NOTE.txt
+   |___NOTES.txt				
    |___serviceaccount.yaml
    |_____service.yaml
    |____tests
@@ -125,7 +125,7 @@ helm install/upgrade/template
 ----4. Values.yaml				--> holds all the values to be injected into template. Templates are rendered into K8s manifest files. 
 
 Note: From helm3 dependancies are moved to chart.yaml file. thus eliminating the need for requirements.yaml file. To download all the dependancies into chart directory
-run helm dependancy update. 
+run "helm dependancy update". 
 
 helm pull bitnami/mysql
 
@@ -175,12 +175,12 @@ helm rollback <release-name> <revision number>
 
 
 ---create chart structure---
-helm create test			--> cretaes chart dir structure
+helm create test			--> creates chart dir structure
 cd test and helm package		--> create chart package i.e tgz which can be used for installation 
 
 
 ----helm dependancy management----
-dependancies can be dynamically linked using dependancies field in chart.yaml and dependancies can be pulled from url or repo nameif already added through
+dependancies can be dynamically linked using dependancies field in chart.yaml and dependancies can be pulled from url or repo name if already added through
 helm repo add 
 
 helm dependancy list <cart-name> 			--> list all dependancies of chart
@@ -188,7 +188,7 @@ helm dependancy list <cart-name> 			--> list all dependancies of chart
 Chart dependancies: conditions and Tags (both boolean values)
 by default all dependancies are installed. Tags and conditions control loading of dependancies and are to be set in values.yaml file. 
 Note: absence of condition has no effect. conditions always overrite tags. Multiple tags are injected as list. if one tag is true then dependancy is installed. (OR)
-dependancy can be eaither chart-archive (.tgz file) or unpacked chart dir.
+dependancy can be either chart-archive (.tgz file) or unpacked chart dir.
 
 example: 
 dependancies:
@@ -226,12 +226,12 @@ Release.Namespace: ns the chart was released to
 chart.Name: name of chart
 chart.Version: version of chart
 
-{{ chart.Name }}-{{- Release.Name}}				--> - (hyphen) used to trim white spaces 
+{{ chart.Name }}-{{- Release.Name}}				--> - (hyphen) used to trim white spaces. white spaces are added if we use {{ }} so use - to remove 
 
 --rendering charts---
 you can render charts without actually installing them. useful to test chart templates. 
 Two ways:
-1. Rendering without rlease info {{ Release.Name }} won't evaluate
+1. Rendering without release info {{ Release.Name }} won't evaluate
 helm template <chart-dir> 						--> cannot replace any values that depends on release info.
 2. Rendering with release info
 helm install <chart-dir> --dry-run
@@ -254,6 +254,159 @@ image: "{{ .Values.image.name }}:{{ required "A valid .Values.image.tag is requi
 when values are not set in values.yaml then default values are used. 
 replica: {{ default 1 .Values.replica | int }}
 
- 
+
+--template functions--
+{{ .Values.app.url | quote }}			--> quote is function for "" (other avail fun like upper,lower,trunc etc)
+
+index function is used to access array elements:
+Values.yaml--> 
+colors:							{{ index .Values.colors 0 }} 	--> to access blue
+ - blue
+ - red
+ - green
+image:							{{ (index .Values.image.lables 0).app }}	--> prints db
+  labels:
+   - app: db
+   - env: prod
 		
+
+--template var---
+Var is named ref to another object. it follows the form $name and use special assignment operator :=. used in conjunction "with" and "range".  there is global var $. points to root context. 
+
+ex:
+{{- $podname := "nginx" -}}
+appVersion: v1
+kind: pod
+metadata: 
+  name: {{ $podname }}-pod
+spec: 
+
+
+---if-else---
+OR  {{- if or .Values.myapp.config.local .Values.myapp.config.nfs }}
+     ... 
+    {{- end }}
+
+NOT {{- if not .Values.app.something }}
+    ...
+    {{ end }}
+
+equal {{- if eq .Values.app.something .Values.app.somethingElse }}
+      ...
+      {{- end }}
+
+not equal {{- if ne .Values.myapp.color "blue" }}
+          ...
+          {{- end }}
+
+
+ex:
+db_data:					--> Values.yaml
+  env: prod
+  db_user: admin
+  db_table: "test-db"
+
+apiVersion: v1						--> templates/dep.yaml
+kind: pod
+metadata:
+  name: {{ Release.name }}-configmap
+data:
+  env: {{ .Values.db_data.env | default "dev" }}		--> .Values.db_data can be written once by setting scope using "with". no need to repeat scope
+  db_user: {{ .Values.db_data.db_user | lower }}
+  {{- if eq .Values.db_data.db_table "test-db" }}
+  db: test-db
+  {{ else }}
+  db: prod-db
+  {{- end }}
+
+
+---range function---
+{{ . }} -->  current element in iterator. 
+ex: 
+metadata:					--> templates/dep.yaml
+  {{- if .Values.db_data }}
+  annotations:
+    {{- range $key, $value := .Values.db_data }}
+    {{ $key }}: {{ $value | quote -}}
+    {{- end }}
+  {{- end}}
+
+
+iterate over list:	
+env:						--> templates/dep.yaml 
+{{- range list "blue" "red" "green" }}
+- name: {{ . | upper | printf "COLOR_%s" }}
+  value: {{ . -}}
+{{- end }}
+
+
+---modify scope with---
+"with" controls var scope and current scope be changed using it. 
+ex: 
+apiVersion: v1						--> templates/dep.yaml
+kind: pod
+metadata:
+  name: {{ Release.name }}-configmap
+data:
+  {{- with .Values.db_data }} 
+  end: {{ .env | default "dev" }}
+  db_user: {{ .db_user | lower }}
+  {{- if eq .db_table "test-db" }}
+  db: test-db
+  {{ else }}
+  db: prod-db
+  {{- end }}
+  {{- end }}
+
+
+---------------------Named templates----------------------------------
+Named template/sub-template/embedded template is fragment of text that is declared(using define keyword) in one file (always named with _ like _helpers.tpl) and rendered into another template, usually in different file. 
+invoked using template function or include function with scope. 
+syntax: {{- define "mychart.subtemplate" }}					-> sub-templates created using define
+        ...
+        {{- end }}
+
+{{ include "<sub-template-name>" <scope> }}
+{{ template "<sub-template-name>" <scope> }}
+
+ex: 
+{{- define "mychart.labels" }}					--> templates/_helpers.tpl
+lables:
+  generator: helm
+  date: {{ now | htmlDate }}
+{{- end }}
+
+
+apiVersion: v1
+kind: pod
+metadata:						output--> metadata:
+  name: {{ .Release.Name }}-configmap					name: RELEASE-NAME-configmap
+  {{- template "mychart.labels" }}					labels:
+data: 									  generator: helm
+									  date: 2023-12-09
+
+
+
+using include:
+ex: 
+{{- define "mychart.app" }}
+app_name: {{ .chart.name }}
+app_version: {{ .chart.version }}
+{{- end -}}
+
+apiVersion: v1
+kind: configMap
+metadata: 
+  name: {{ .Release.Name  }}-configmap
+  lables:
+  {{ include "mychart.app" . | indent 4 }}			--> . indicates root scope
+	
+
+Note: nindent used to provide number of indentation in next line. 
+Helm preserves indentation with the template keyword and may require explicit indentation adjustments (using functions like nindent) when using the include keyword, not the other way around. 
+
+
+
+
+
 
