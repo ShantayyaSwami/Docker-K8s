@@ -1,6 +1,6 @@
 [KANIKO + BUILDKIT] --> daemonless containerization tools usually used in CI/CD(jenkins) to build container images. 
 Docker is an opensource containerization platform for developing, shipping and running application.
-Its is designed to solve problem statement of "it works on my machine" i.e code portability.
+It is designed to solve problem statement of "it works on my machine" i.e code portability.
 its client side pgm
 act as service
 social networking platform
@@ -9,8 +9,8 @@ container: Is a standerd unit of software that packages up code, all its dependa
 os(some chunks) so the application runs quickly and relaibly from one platform to another. 
 portable artifcat, easily shared and moved around.
 simple words "container is a process running in standalone env with its own space and resources through cgroups and namespaces. its like light weight vm. 
-control groups: allocates and limits resources such as cpu,memory thats are used by container. 
-namespaces: to provide isolated workspace((fs,network,storage etc) to run processes. pid,net,ipc,mnt,uts <kernal and version identfier>
+control groups(How much we can use): allocates and limits resources such as cpu,memory thats are used by container. 
+namespaces(what we can use): to provide container an isolated workspace((fs,network,storage etc) to run processes. pid,net,ipc,mnt,uts <kernal and version identfier>
 
 Note: containers root user does not have root privilage on host. 
 container runtime: also called as container engine, its a software that is responsible for running containers. (docker,containerd,rtc,podman etc)
@@ -21,6 +21,9 @@ Docker-client
 docker-daemon
     | 
 local image storage    <------------> DockerHub
+
+/var/lib/docker 		--> docker home
+/etc/docker/daemon.json		--> docker home,private registry configured 
 
 
 Virtual machine 			vs 				Docker
@@ -51,7 +54,7 @@ outside world of container does not know whats happening inside container unless
 container is very very separate thing. 
 
 Syntax: docker run [option] IMAGE:[TAG] [CMD] [ARG]
-ex: docker run busybox echo hello world
+ex: docker run busybox echo hello world				--> docker run creates and runs container, behind the scenes its runc that is doing the process. 
 
 [OPTION]
 -it -> gateway to interact with container. 
@@ -89,7 +92,7 @@ downgrading docker:
 Docker images:
 Docker image is a immutable file containing the code and components needed to run soft in container. 
 Container and images use layered file system. and each layer contains only the diff from previous layer.
-image consist of one or more read only layers while container adds one additional writable layer.
+image consist of one or more read only layers while container adds one additional writable layer.		--> called copy on Write (CoW)
 
          ----------------------------------
          |writable container layer         |
@@ -141,14 +144,14 @@ docker container rm <ID>			--> remove container. can't remove running container 
 docker run -d --name=<name> <image name>	--> create and start container in detached mode with cntainer name
 docker log -f <container id>			--> check runtime logs like tail in linux. -f: follow
 docker rm -f ${docker ps -aq}			--> remove exited containers forcefully. -q shoes only ID
-docker ps -q	--> shows only running containers. 
+docker ps -q					--> shows only running containers. 
 
 docker cp source destination		--> copy files from host to container & vice-versa <docker cp nginx.conf web:/temp> --> seems like scp
 docker stats				--> shows memory,cpu consumption of container. 
 
 Note: container goes into exited state when container fails/completes or container asking for something which we are not giving. 
 docker run -it ubantu			--> start ubantu and provide interactive mode(STD_IN terminal) with -i and tty terminal with -t (STD_OUT terminal)
-ctr+pq		--> to come out of container without exit
+ctr+pq					--> to come out of container without exit
 
 docker exec container_ID command		--> execute the command inside running container. 
 
@@ -187,7 +190,7 @@ COPY ->  copy file from host to image
 ADD -> similar to COPY but also pull files using URL and extract archive into loose file in images
 EXPOSE -> port to be published. port number must be of application. EXPOSE is just for documentation, it will not open the port in container. 
 VOLUME -> user persistent volume from host machine in containers. used for configuration files not for main files which apps need
-CMD  -> sets default commands and/or parameters which can be overridden when the container is run. can have multiple CMD but last one referred. 
+CMD  -> sets default commands and/or parameters which can be overridden when the container is run. can have multiple CMD but last one referred.
 ENTRYPOINT --> specifies the main command that will be executed when the container starts. CMD just pass a argument/parameter to an entrypoint. 
 ENTRYPOINT + CMD if given both in dockerfile. use --entrypoint=<cmd> to replace entrypoint. only single entrypoint allowed. 
 
@@ -201,12 +204,12 @@ docker context: current dir contents like dockerfile,necessary files sent to doc
 
 ----
 ex: build python-flask docker image
-ARG PYTHON_VERSION:3.8
+ARG PYTHON_VERSION=3.8
 FROM: python:${PYTHON_VERSION}
 LABEL author="Shantayya Swami"			--> key=value 
 WORKDIR /app
 COPY . .
-RUN pip install -r requirement.txt
+RUN pip install -r requirements.txt
 EXPOSE 3000
 CMD python ./index.py
 
@@ -270,7 +273,8 @@ git clone <url>
 
 FROM maven:alpine as build
 WORKDIR /app
-COPY --from=gitclone /app/target/employee-application/ .
+COPY --from=gitclone /app/target/employee-application/pom.xml .
+COPY --from=gitclone /app/target/employee-application/src src
 RUN mvn package
 
 FROM tomcat:9.0 as dockerize
@@ -295,8 +299,7 @@ while building container images we often concern with 2 things
 7. avoid exposing unnecessary ports
 8. hardcoding credentials
 
-Flattening an Image: sometimes image with few layers perform better and in few cases, you may want to take an image with many 
-layers and flatten them into single layer.
+Flattening an Image: sometimes image with few layers perform better and in few cases, you may want to take an image with many layers and flatten them into single layer.
 1. run a container from image
 docker run -d --name flat_container noflat
 2. export runnig container(step1) to an archive using docker export
@@ -307,7 +310,7 @@ cat flat.tar | docker import - flat:latest
 
 stateful and stateless applicatons: 
 stateful applications hold onto your data across different sessions(like shopping cart thats retains items) while stateless applications does not remember your 
-past interactions and treat each new interaction as new one. 
+past interactions and treat each interaction as new one. 
 
 
 --------------------Storage and Volumes: (/var/lib/docker/volumes)---------------------------
@@ -370,7 +373,7 @@ doker volume rm VOLUME_NAME
 docker volume prune				--> volume without data. 
 
 -----setting env variables for container----
-docker run --rm -e NAME=DEVOPS nginx:latest env		--> shows env variables from nginx container
+docker run --rm -e NAME=DEVOPS nginx:latest env				--> shows env variables from nginx container
 docker run --rm --env-file envfile.txt	nginx:latest env		--> if want to set multiple env variables then use env file. 
 
 
@@ -394,7 +397,7 @@ containers on the default bridge network can only access other container through
 	|_________________________↓_________________________|
 				  ↓ (use NAT to convert container private IP to host public IP)
 				Eth0 (Host interface)   --> to connect to outside world
-brtcl show				--> shows virtual eth assigned by docker01 to avail containers 
+brctl show				--> shows virtual eth assigned by docker01 to avail containers 
 
 ex: docker network create my_net				--> creates custom bridge network. 
     docker run -d --net my_net nginx:latest --name c1
@@ -462,7 +465,7 @@ define docker-compose project:
 1. make dir to contain your docker-compose proj
 2. change to proj dir
 3. add docker-compose.yaml to dir
-4. define apps using docker.compose.yaml
+4. define apps using docker-compose.yaml
 ex: 
 docker-compose file structure:
 version:
@@ -470,20 +473,20 @@ services:
   container-01:					--> we can also build images using build keyword instead of using already built images. 
     build: 
       context: <location of dockerfile>
-      dockerfile: Dockerfile.prod		--> no need to use dockerfile keyword is name is Dockerfile
+      dockerfile: Dockerfile.prod		--> no need to use dockerfile keyword if name is Dockerfile
     image: <if we use buid then this keyword will tag to image build in above step>  
     env:
     ports:
-    volume:
-    network:
+    volumes:
+    networks:
     restart: 
   container-02:
     command: 					--> its like CMD we mention in dockerfile or running container. 
     image: 
     env:
     port:
-    volume:
-    network:
+    volumes:
+    networks:
 volumes: <optinal>				--> whenever keyword appended with 's indicates list
  - my_db
 networks: <optional>
@@ -493,7 +496,7 @@ networks: <optional>
 Note: volumes and networks are same as 
 	docker create volume my_db
 	docker create network my_net
-by default docker compose creates custom network for you. use depends_on: <list> under container to use dependency management. 
+by default docker compose creates custom network for you. use depends_on: <list> to control startup service order under container to use dependency management. 
 -----------------------
 version: '3'
 services: 
@@ -532,12 +535,11 @@ docker-compose down -f <filename>
 
 ---create and run resources
 docker-compose up -d 
-docker-compose ps    --> list containers/services running under docker-compose
+docker-compose ps     --> list containers/services running under docker-compose
 docker-compose down   --> stop and remove all resources
 
 Docker stack:
-A Stack is a collection of interrelated services that can be deployed and scaled as unit. docker stack are similar to the 
-multi container apps created using docker-compose. However they can be scaled and executed across swarm cluster.
+A Stack is a collection of interrelated services that can be deployed and scaled as unit. docker stack are similar to the multi container apps created using docker-compose. However they can be scaled and executed across swarm cluster.
 docker stack deploy -c COMPOSE_FILE STACKNAME    --> Deploy stack to swarm cluster using compose file
 docker stack ls			--> list current stacks
 dockr stack ps STACKNAME     --> list the tasks associated with stack
@@ -550,8 +552,45 @@ deploy:
  replicas: number
 
 
+---customize docker compose files for different env---
+Customizing a Docker Compose file for different environments is a common practice to adapt the configuration settings based on where you are running your application (dev/test/prod).
+
+#docker-compose.yml (Main Compose File)
+version: '3'
+services:
+  web:
+    image: my-web-app:latest
+    ports:
+      - "80:80"
+    environment:
+      - DATABASE_URL=mysql://user:password@db:3306/mydatabase
+
+
+#docker-compose.dev.yml (Development Environment)
+version: '3'
+services:
+  web:
+    ports:
+      - "8080:80"
+    environment:
+      - DATABASE_URL=mysql://devuser:devpassword@dev-db:3306/devdatabase
+
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml config
+
+#output
+services:
+  web:
+    environment:
+      - DATABASE_URL=mysql://devuser:devpassword@dev-db:3306/devdatabase
+    image: my-web-app:latest
+    ports:
+    - 8080:80
+version: '3'
+
+Note: The priority is given to the settings in the last specified file, so settings in docker-compose.dev.yml take precedence over those in docker-compose.yml
+
 ------------------------------Container orchestration-------------------
-Container Orchestration: all about managing lifecycle of containers(starting,stopping,moving containers across diff hosts,lead balancing,HA etc)
+Container Orchestration: all about managing lifecycle of containers(starting,stopping,moving containers across diff hosts,load balancing,HA etc)
 Docker Swarm: feature of docker, which allows you to build distributed cluster of docker machines to run containers.
 it facilitates orchestration, high availability and scaling. 
 
@@ -631,8 +670,8 @@ A service is the image for microservices like HTTP server,db server,any type of 
 
 Docker service create [OPTIONS] IMAGE ARG
 ex:  docker service create --name nginx --replica 3 -p 8080:80
---replica   -> number of replica tasks to create for service.
---name     --> name of the service
+--replica   			-> number of replica tasks to create for service.
+--name     			--> name of the service
 -p PUBLISHED_PORT:SERVICE_PORT   --> publish a port so that service can be accessed externally
 
 Templates can be used to give dynamic values to some flags with docker service create
@@ -646,7 +685,7 @@ docker service ls     -> list current services
 docker service ps SERVICE   -> list service tasks
 docker service inspect SERVICE   --> get more info about service
 docker service update [OPTION] SERVICE   --> make changes to service
-docker service rm SERVICE --> delet an existing service
+docker service rm SERVICE --> delete an existing service
 
 replicated     vs    Global services
 replicated services will run req number of replica tasks across swarm cluster.
@@ -697,7 +736,7 @@ offcial docker images: dont have / in names + have official sign and name as OFF
 }
 3. restart docker daemon
 
-ONBUILD: it sets up trigger that gets executed when image is used as base for another image. it used to automate actions in child image when current image is used as basse. 
+ONBUILD: it sets up trigger that gets executed when image is used as base for another image. it used to automate actions in child image when current image is used as base. 
 ONBUILD COPY . /app					--> used very less
 
 Docker best practices:
@@ -707,7 +746,7 @@ Docker best practices:
 4. Optimize the caching image layer (order docker directives to use caching)
 5. use .dockerignore to exlude files and folders. 
 6. make use of multi-stage builds (for smaller size of images)
-7. Use least pivelaged user.   (docker has root permision which can lead to exploitation of app hosted inside container)
+7. Use least privelaged user.   (docker has root permision which can lead to exploitation of app hosted inside container)
 8. Scan images for vulnerabilities. 
 
 
