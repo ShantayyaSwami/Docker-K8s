@@ -156,7 +156,7 @@ other ways:														20. Ingress
 4. A full url (helm install foo url)
 
 ---changing defaut values with --set ----
-helm install bitnami/nginx --set service.type=ClusterIP
+helm install bitnami/nginx --set service.type=ClusterIP					--> use helm upgrade --install	 it will upgrade if existing esle install
 helm get values nginx
 
 --changing the default values with custom values file---
@@ -404,6 +404,7 @@ metadata:
 
 Note: nindent used to provide number of indentation in next line. 
 Helm preserves indentation with the template keyword and may require explicit indentation adjustments (using functions like nindent) when using the include keyword, not the other way around. 
+
 
 
 
