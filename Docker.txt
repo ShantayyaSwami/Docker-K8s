@@ -17,7 +17,7 @@ container runtime: also called as container engine, its a software that is respo
 create--> run--> paused--> stopped--> deleted	--> life cycle of container. 
 
 Docker-client
-    |
+    |			through /var/run/docker.sock file
 docker-daemon
     | 
 local image storage    <------------> DockerHub
@@ -56,6 +56,11 @@ container is very very separate thing.
 Syntax: docker run [option] IMAGE:[TAG] [CMD] [ARG]
 ex: docker run busybox echo hello world				--> docker run creates and runs container, behind the scenes its runc that is doing the process. 
 
+docker run:											docker create + start
+Pulls the specified image from the registry if not present locally.		1. Requires the image to be present locally; it doesn't automatically pull the image.
+Creates and starts a container in one command.					2. Involves two separate commands to create and start the container.
+Can automatically remove the container after it exits if --rm flag is used	3. Doesn't automatically remove the container after it exits. (Can't use --rm)
+	
 [OPTION]
 -it -> gateway to interact with container. 
 -i -> interactive
@@ -63,7 +68,7 @@ ex: docker run busybox echo hello world				--> docker run creates and runs conta
 -d -> detached mode that is to run container at background
 --name -> name the container
 --restart -> specify when container should restart automatically [values: no, on-failure, always, unless-stopped]
--p <host port>:<container port> -> expose conatiners port by mapping it to host port. (can use multiple times)
+-p <host port>:<container port> -> expose containers port by mapping it to host port. (can use multiple times)
 --rm -> automatically remove conatiner when it exits. cannot be used with --restart
 --memory -> provide hard limit for container
 --memory-reservation -> soft limit, used when exceeds hard limit
@@ -118,7 +123,7 @@ docker image pull IMAGE:[TAG]        -> download docker images
 docker image history IMAGE         -> list the layers used to build image
 docker image ls                    -> list the images
 docker images inspect IMAGE         --> get detailed info about image
-docker image rm IMAGE or docker image rmi IMAGE    -> remove image
+docker image rm IMAGE or docker image rmi IMAGE    -> remove image	 --> rm is general removal command (for containers,volume etc) but rmi is image specific 
 docker image rm -f IMAGE   -> remove all tags and delete image. Note -> If we delete image which is being referrenced by running 
 container then it will delete tag but not actual image turning into dangling image 
 (which has no container + tag refer but consume space on system)
@@ -143,7 +148,8 @@ docker ps -a 					--> shows all containers
 docker container rm <ID>			--> remove container. can't remove running container use -f if want
 docker run -d --name=<name> <image name>	--> create and start container in detached mode with cntainer name
 docker log -f <container id>			--> check runtime logs like tail in linux. -f: follow
-docker rm -f ${docker ps -aq}			--> remove exited containers forcefully. -q shoes only ID
+docker rm -f ${docker ps -aq}			--> remove all containers forcefully. -q shoes only ID
+docker rm $(docker ps -aqf status=exited)	--> remove only exited containers
 docker ps -q					--> shows only running containers. 
 
 docker cp source destination		--> copy files from host to container & vice-versa <docker cp nginx.conf web:/temp> --> seems like scp
@@ -173,7 +179,8 @@ Google distroless images(find in gcr.io repo)  are speciliazed container images 
 these instructions are called directives.
 FROM  -> sets base image + must be first dir in file
 LABEL -> defines author name or email address
-ARG  -> temp variable used while building an image. 
+ARG  -> temp variable used while building an image. Post img built, the values of ARG are no longer available or accessible by processes running inside the container.
+use --build-arg option to override it while building image.
 ENV  ->  set env variables which is used at runtime(container). use -e option to override it while launging container.
 WORKDIR  -> set current working dir for subsequet directives ADD, COPY, CMD, ENTRYPOINT etc + can use multiple times. (create + cd)
 RUN  -> commands to be executed while building image.[inside image]
@@ -185,6 +192,8 @@ each RUN command adds a layer in image so its bad practice to use multiple RUN t
 ex: RUN echo "Hello World" && \
         apt-get update && \
         apt-get install utils -y
+
+Note: executable form reduce the chances of shell-related vulnerabilities and potential security risks such as shell injection attacks.
 
 COPY ->  copy file from host to image
 ADD -> similar to COPY but also pull files using URL and extract archive into loose file in images
@@ -200,7 +209,7 @@ ex: HEALTHCHECK CMD curl --fail http://<url> or Heath entrypoint || exit 1
 
 most common: FROM,WORKDIR,COPY,RUN,CMD,ENTRYPOINT
 
-docker context: current dir contents like dockerfile,necessary files sent to docker daemon to build image. The first thing build process does is send the entire context(current woring dir contents) recursively to daemon as tarball. 
+docker context: current dir contents like dockerfile,necessary artifacts are sent to docker daemon to build image. The first thing build process does is send the entire context(current woring dir contents) recursively to daemon as tarball. 
 
 ----
 ex: build python-flask docker image
@@ -233,13 +242,13 @@ Note: use can --no-cache if docker dont want to use cache to build image.
 Building efficient docker images:
 general tips:
 1. Put things that are unlikely to change on lower-level layers so to use caching
-2. Dont create unnecessary layers
+2. Dont create unnecessary layers to optimize docker images in terms of size,performance,security and maintainabiity
 3. Avoid including any unnecessary files, packages in images
 
 you can acheive in 3 ways:
 1. Multistage builds
-2. alpines base images
-3. Distroless base images
+2. alpines base images			--> minimal and simple plus have minimal shell env and package manager
+3. Distroless base images		--> minimal and more secure without any shell env and package manager
 
 
 Multi-Stage builds  -> Have >1 FROM directive in dockerfile and each FROM directive starts new stage.
@@ -255,10 +264,10 @@ FROM <base-image> AS stage2
 COPY --from=stage1 ...
  
 Ex: build java apps image 
-FROM maven:alpine as BUILD
+FROM maven:3.8.4-openjdk-17 as BUILD
 WORKDIR /app
 COPY . .
-RUN mvn clean package /app/target/demo.jar
+RUN mvn clean package 
 
 FROM openjdk:8-apline
 WORKDIR  /app
@@ -292,7 +301,7 @@ while building container images we often concern with 2 things
 ---best practices--
 1. Do not run container as ROOT
 2. avoid copying unnecessary files
-3. marge layers
+3. marge layers						
 4. using alpine or distroless images as base image
 5. using multistage builds
 6. health checks
@@ -750,3 +759,175 @@ Docker best practices:
 8. Scan images for vulnerabilities. 
 
 
+challenges faced in docker:
+1. docker is single daemon process can cause single point of failure. (podman solution)
+2. docker daemon runs as root user making it vulnerable If the daemon is compromised, it potentially provides access to the entire host system.
+3. docker does not provide inbuit credential management mechanism we need to depend upon third party integration 
+
+what is docker?
+"Docker is an open-source containerization platform for developing, packaging, and running applications consistently across various environments. In simple terms, it allows a process to run in a standalone environment with its dedicated space and resources, achieved through the use of namespaces and cgroups, which are features of the operating system."
+
+
+How VM are different from containers?
+1. Resource efficiency: light weight/heavier
+2. speed and performance: start quickly/taks long time
+3. islation: use kernal feature like cgroups and namespaces /stronger isolation with its own guest os
+4. portability: solve portability issues/can have portability challenges due to diff os 
+5. size: small/large
+
+
+what is docker lifecycle?
+1. User Interaction:
+The Docker lifecycle typically begins with user interaction through the Docker client, which communicates with the Docker daemon.
+2. Connection to Docker Daemon:
+The Docker client connects to the Docker daemon using  /var/run/docker.sock. 
+3. Image Check in Local Cache:
+Before creating a container, 
+4. Image Pull (if not found locally):
+ /etc/docker/daemon.json, for authentication details to access private repositories.
+5. Container Creation:
+Docker daemon creates a container based on that image. This involves setting up namespaces, cgroups, and other isolation mechanisms to ensure the container runs independently.
+Container Lifecycle:
+1. Created: The container is created but not yet started.
+2. Running: The container is actively running.
+3. Exited: The container has completed its execution or has been manually stopped. This can include a "succeeded" phase if the container completed its task successfully.
+
+what are different docker components?
+1. docker cli
+2. docker daemon
+3. docker registry
+4. docker image
+5. docker containers
+6. docker volume
+7. docker network
+8. docker compose
+
+
+differce between ADD/COPY, ENTRYPOINT/CMD,ARG/ENV?
+COPY ->  copy file from host to image
+ADD -> similar to COPY but also pull files using URL and extract archive into loose file in images
+
+CMD  -> sets default commands and/or parameters which can be overridden when the container is run. can have multiple CMD but last one referred.
+ENTRYPOINT --> specifies the main command that will be executed when the container starts. CMD just pass a argument/parameter to an entrypoint. 
+ENTRYPOINT + CMD if given both in dockerfile. use --entrypoint=<cmd> to replace entrypoint. only single entrypoint allowed. 
+
+ARG  -> temp variable used while building an image. Post img built, the values of ARG are no longer available or accessible by processes running inside the container.
+use --build-arg option to override it while building image.
+ENV  ->  set env variables which is used at runtime(container). use -e option to override it while launging container.
+
+
+what are different types of docker network?
+1. Bridge Network (Default):
+Description: This is the default network mode in Docker. It allows containers to communicate with each other using a virtual Ethernet bridge. Each container connected to the bridge has its own unique IP address.
+Communication: Containers can talk to each other using these IP addresses. Docker also provides a DNS resolver for easy communication between containers using their names.
+Port Mapping: Many container ports can be mapped to a range of host ports.
+
+2. Host Network:
+Description: In this mode, containers share the network namespace with the Docker host. They use the host machine's network directly.
+Communication: Containers essentially behave as if they are running on the host machine, using its network configuration.
+Port Mapping: Port mapping is straightforward, with a one-to-one mapping of container ports to host ports.
+
+3. Overlay Network:
+Description: The overlay network is primarily used in the context of container orchestration systems. like Docker Swarm mode. Containers in the swarm can communicate seamlessly across different hosts.
+Communication: Overlay networks enable communication between containers running on different machines within the Swarm cluster.
+Port Mapping: Similar to the bridge network, many container ports can be mapped to a range of host ports.
+
+4. MacVlan:
+Description: MacVlan (MAC Virtual LAN) allows you to assign a MAC address to each container, making them appear as individual devices on the network.
+Communication: Containers in a MacVlan network can communicate directly with other devices on the network using their assigned MAC addresses.
+Port Mapping: Port mapping in MacVlan is similar to the host network, with a one-to-one mapping of container ports to host ports.
+
+
+
+what is multi-stage build?
+Helps to build docker container in multiple stages allowiing us to copy artifacts from one stage to other making containers light weight. 
+
+
+
+what steps you would take to secure containers?
+1. Use distroless images (Regularly update base images to patch known vulnerabilities. Even distroless images may need updates.)
+2. Implement network isolation (If container networking is not properly configured, containers may have overly permissive network access, potentially exposing sensitive services to unauthorized entities.) 
+3. use image vul scanning usitilies like Trivy,anchore engine etc ( Integrate vulnerability scanning into your CI/CD pipeline to catch issues early in the development process. Regularly scan and update images in production.)
+4. Implement the principle of least privilege. run containers with non-root user.
+5. Limit resources (--cpu, --memory)
+6. regularly update soft (os and other soft security patches)
+7. Enable content trust and image signing (Docker Content Trust ensures the integrity and authenticity of container images.)
+/etc/docker/daemon.json
+{
+  "content-trust": true
+  "user": "non-root-user"
+}
+8. Use Docker Bench Security periodically:  (its a script that checks for dozens of common best-practices around deploying Docker containers in production.  assess the security of your Docker daemon configuration.)
+git clone https://github.com/docker/docker-bench-security.git
+cd docker-bench-security
+sudo sh docker-bench-security.sh
+review results --> The checks are categorized into sections such as 
+"Host Configuration," 
+[INFO] 1 - Host configuration should be backed up
+[PASS] 2 - Ensure /etc/docker directory permissions are set to 755 or more restrictive
+[PASS] 3 - Ensure /etc/default/docker file permissions are set to 644 or more restrictive
+[WARN] 4 - Ensure that the daemon.json file permissions are set to 644 or more restrictive
+
+"Docker Daemon Configuration,"
+[INFO] 1 - Restrict network traffic between containers
+[PASS] 2 - Set the logging level
+[PASS] 3 - Allow Docker to make changes to iptables
+[INFO] 4 - Disable the experimental `dockerd` features
+[FAIL] 5 - Do not use the aufs storage driver
+
+
+"Container Images and Build File." 
+[INFO] 1 - Restrict network traffic between containers
+[PASS] 2 - Set the logging level
+[PASS] 3 - Allow Docker to make changes to iptables
+[INFO] 4 - Disable the experimental `dockerd` features
+[FAIL] 5 - Do not use the aufs storage driver
+
+
+Note: By default, processes in a Docker container run as the root user within the container's user namespace. use non root user to run containers too.
+
+
+how to run docker daemon as non-root user?
+By default, the Docker daemon runs with root privileges. To enhance security, consider running the Docker daemon as a non-root user.
+/etc/docker/daemon.json
+{
+  "user": "non-root-user"
+}
+Ensure that the specified user has the necessary permissions and is a member of the docker group.
+
+
+how to run containers as non-root user?
+1. Specify User During Container Run:
+docker run -u or --user <UID>:<GID> your-image
+
+2. Use a Named User:
+docker run --user username your-image			--> instead of uid and gid use name directly
+
+3. Set User in Dockerfile:
+FROM your-base-image
+RUN useradd -m -s /bin/bash myuser			--> creat nn-root user
+USER myuser						--> specify default user
+
+4. Use User Namespace:
+sudo unshare --user						--> Create and enter the user namespace
+useradd -m user1						--> Create a non-root user 'user1' in the first namespace
+exit								--> Exit the first user namespace
+sudo docker run -it --rm --userns=user1 ubuntu			--> Run a Docker container in the first user namespace
+
+5. Specify User in Docker Compose:
+services:
+  your-service:
+    image: your-image
+    user: "1000:1000"
+
+6. Runtime Configuration (for Kubernetes):			--> use securityContext
+apiVersion: v1
+kind: Pod
+metadata:
+  name: your-pod
+spec:
+  containers:
+  - name: your-container
+    image: your-image
+    securityContext:
+      runAsUser: 1000

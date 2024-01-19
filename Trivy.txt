@@ -1,0 +1,102 @@
+Trivy is a comprehensive container image vulnerability scanner.
+1. Scan an Image:
+trivy <image>
+
+2. Specify Image Tag:
+trivy <image>:<tag>
+
+3. Specify Severity Levels:
+trivy --severity HIGH,CRITICAL <image>
+
+4. Output as JSON:
+trivy --format json -o <output.json> <image>
+
+5. Insecure Registry:
+trivy --insecure-registry <image>
+
+6. Ignore Unfixed Vulnerabilities:
+trivy --ignore-unfixed <image>
+
+7. Offline Mode:
+trivy --offline <image>
+
+8. Clear Cache:
+trivy --clear-cache
+
+9. Custom Policy File:
+trivy --policy <custom-policy-file.yml> <image>
+
+10. Scan Multiple Images:
+trivy <image1> <image2> <image3>
+
+11. Scan a Local Image:
+trivy docker-archive:/path/to/image.tar
+
+12. Scan Running Containers:
+trivy container <container_id>
+
+
+Examples of vulnerabilities that were commonly reported in container images historically.
+1. CVE-2019-5021 (Alpine Linux):
+Description: In Alpine Linux through 3.9.2, the apk-tools package mishandles the --root option because of a directory traversal attack in the apk_get_archive_filename function. This vulnerability could allow an attacker to overwrite files in the filesystem, leading to potential privilege escalation.
+Solution: Upgrade to a fixed version of Alpine Linux, such as 3.9.3 or later.
+
+2. CVE-2020-15257 (Docker):
+Description: A symlink-race vulnerability exists in Docker before 19.03.11, allowing a malicious container to overwrite sensitive host system files and potentially lead to container escape.
+Solution: Upgrade Docker to version 19.03.11 or later to address the symlink vulnerability.
+
+3. CVE-2017-1000117 (npm, Node.js):
+Description: The npm command-line client before version 5.4.0 is prone to a symlink race attack on the entire system, leading to potential privilege escalation.
+Solution: Upgrade npm to version 5.4.0 or later. Additionally, users should exercise caution and avoid running npm with elevated privileges whenever possible.
+
+4. CVE-2019-11229 (Python):
+Description: The urllib library in Python before 3.7.4 allows an HTTP server to conduct Regular Expression Denial of Service (ReDoS) attacks.
+Solution: Upgrade Python to version 3.7.4 or later to mitigate the vulnerability.
+
+5. CVE-2020-28188 (sudo in Ubuntu):
+Description: A vulnerability in sudo versions before 1.8.31 could allow a local attacker to execute arbitrary commands with elevated privileges, potentially leading to unauthorized access or privilege escalation.
+Solution: Upgrade the sudo package to version 1.8.31 or later.
+
+
+
+-----symlink-race vulnerability----
+symlink race vulnerabilities often involve the extraction of archive files within a container, where the container runtime extracts files from an archive into a directory. The vulnerability arises due to the following sequence of events:
+
+Time-of-Check (TOC):
+
+The container runtime checks for the existence or properties of a file or directory.
+Race Condition:
+
+There is a time gap between the time-of-check and the subsequent operation.
+Time-of-Use (TOU):
+
+The container runtime uses the information obtained during the time-of-check to perform an action, such as extracting files.
+During the time gap, if an attacker can manipulate the file system, particularly by creating symbolic links to sensitive files, they may be able to trick the program into performing unintended actions or accessing unauthorized resources. For example, an attacker could create a symlink pointing to a critical system file, and if the program extracts files into the target directory, it might unintentionally overwrite or modify the system file.
+
+
+
+Note: container scanning is mostly happen on fina image however to tighten the security we can use trivy to scan intermediate images.
+Example:
+FROM adoptopenjdk/openjdk11:alpine-slim as build
+WORKDIR /workspace/app
+
+COPY mvnw .
+COPY .mvn .mvn
+COPY pom.xml .
+COPY src src
+
+RUN ./mvnw install -DskipTests
+RUN mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
+
+# Run vulnerability scan on build image
+FROM build AS vulnscan
+COPY --from=aquasec/trivy:latest /usr/local/bin/trivy /usr/local/bin/trivy
+RUN trivy rootfs --no-progress /
+
+FROM adoptopenjdk/openjdk11:alpine-slim
+VOLUME /tmp
+ARG DEPENDENCY=/workspace/app/target/dependency
+COPY --from=build ${DEPENDENCY}/BOOT-INF/lib /app/lib
+COPY --from=build ${DEPENDENCY}/META-INF /app/META-INF
+COPY --from=build ${DEPENDENCY}/BOOT-INF/classes /app
+ENTRYPOINT ["java","-Dserver.port=${PORT}","-cp","app:app/lib/*","com.example.demo.DemoApplication"]
