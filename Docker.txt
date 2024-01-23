@@ -1,3 +1,4 @@
+Docker verison: 24.0.X
 [KANIKO + BUILDKIT] --> daemonless containerization tools usually used in CI/CD(jenkins) to build container images. 
 Docker is an opensource containerization platform for developing, shipping and running application.
 It is designed to solve problem statement of "it works on my machine" i.e code portability.
@@ -194,6 +195,7 @@ ex: RUN echo "Hello World" && \
         apt-get install utils -y
 
 Note: executable form reduce the chances of shell-related vulnerabilities and potential security risks such as shell injection attacks.
+each RUN instruction is a new fs layer. more fs layer less performant and larger image wil be. 
 
 COPY ->  copy file from host to image
 ADD -> similar to COPY but also pull files using URL and extract archive into loose file in images
@@ -466,7 +468,7 @@ location /{
 }
 
 
--------------------------------------Docker compose: (containers created though docker compose shares the same network)-----------------------------------
+-------------------------------------Docker compose: v2.23.0(containers created though docker compose shares the same network)-----------------------------------
 Tool that allows you to run multi-container application as single service. defined using declarative format in single node(YAML file).
 Note:compose does not use swarm mode to deploy services to multiple nodes in swarm. To deploy apps across swarm use
 "docker stack deploy"
@@ -748,6 +750,9 @@ offcial docker images: dont have / in names + have official sign and name as OFF
 ONBUILD: it sets up trigger that gets executed when image is used as base for another image. it used to automate actions in child image when current image is used as base. 
 ONBUILD COPY . /app					--> used very less
 
+
+---------------------------------------Interview Questions----------------------------------
+
 Docker best practices:
 1. Use the docker official images as base image
 2. Use Specific base image version (Latest images are tent to be unstable)
@@ -767,6 +772,11 @@ challenges faced in docker:
 what is docker?
 "Docker is an open-source containerization platform for developing, packaging, and running applications consistently across various environments. In simple terms, it allows a process to run in a standalone environment with its dedicated space and resources, achieved through the use of namespaces and cgroups, which are features of the operating system."
 
+what is docker image?
+Docker image is an immutable package containing all necessary components like code,runtime liberaries,dependancies,chunks of os etc to run the software. 
+
+what is container?
+container is an active instantiation or runtime execution of an image within the Docker environment. container is a process running in standalone env with its own space and resources through cgroups and namespaces. its like light weight vm.
 
 How VM are different from containers?
 1. Resource efficiency: light weight/heavier
@@ -828,7 +838,7 @@ Communication: Containers essentially behave as if they are running on the host 
 Port Mapping: Port mapping is straightforward, with a one-to-one mapping of container ports to host ports.
 
 3. Overlay Network:
-Description: The overlay network is primarily used in the context of container orchestration systems. like Docker Swarm mode. Containers in the swarm can communicate seamlessly across different hosts.
+Description: The overlay network is primarily used in the context of container orchestration systems. like Docker Swarm mode. Containers in the swarm can communicate seamlessly across different hosts.  --driver=overlay
 Communication: Overlay networks enable communication between containers running on different machines within the Swarm cluster.
 Port Mapping: Similar to the bridge network, many container ports can be mapped to a range of host ports.
 
@@ -931,3 +941,54 @@ spec:
     image: your-image
     securityContext:
       runAsUser: 1000
+
+
+What is default docker home and can you change docker home?
+/var/linb/dcoker
+Yes we can change it by changingin /etc/docker/daemon.json file
+/etc/docker/daemon.json
+{
+  "data-root": "new-docker-home"
+}
+
+
+Can you mention docker command?
+docker version/info/top container/stats/run/ps/exec/pull/push/inspect container
+
+How to check logs in docker?
+docker logs -f -t<timestamp> -n 100 containername
+
+What is CoW (copy on write)?
+docker image is read only layers when we create containers from images then writable layer gets created on top of read only layers. docker kill will delete the fs.
+
+
+How do you push docker images t insecure registries?
+we can update registry details under /etc/docker/daemon.json file 
+{
+  "insecure-registries": ["url"]
+}
+sudo systemctl restart docker
+
+
+How do you save the changes done to container?
+1. stop the container
+2. use docker commit id image_name:tag
+
+How do you clean up docker host?
+we can docker prune command or use custome docker rm command to clean up space
+docker system df
+docker rm -f $(docker ps -qa)
+docker system prune						--> remove unused resources like stopped containers,volumes,dangling images,build cache etc
+docker system prune -a 						--> to remove all unused images
+docker rmi $(docker images -f "dangling=true" -q)		--> to remove only dagling images
+
+
+How do you control the startup order of containers?
+we can use the depeds_on to handle the startup order.
+
+
+How will you customize docker compose files for different enviroments?
+we can specify multiple compose files in single command to combine multiple compose files 
+docker-compose -f 1.yaml -f 2.yaml config		--> it will show aggregated compose file output. here 2.yaml file contents will override 1.yaml contents 
+docker-compose config					--> run this with modified compose file
+
