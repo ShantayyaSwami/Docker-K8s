@@ -13,7 +13,7 @@ storage: persistentVolume, StorageClass, PersistentVolumeClaim
 
 K8s Architechture overview:1.24
 
-Control plane           	kubectl                              Nodes(30000-32767)                   
+Control plane           	kubectl                              Worker Nodes(30000-32767)                   
 -----------------------------------↓-----------        --------------------------------------------------------
 |________________           _______↓_________ |       |------->Kube Proxy Server|------>Kube Proxy Server    |
 |Kube Controller|---------> |Kube API Server|<------->|                         |                            |
@@ -86,6 +86,16 @@ kubeadm is a tool that will simplify the process of setting of K8s cluster.
 install containerd/docker --> install K8s packages (kubeadm,kubelet,kubectl) --> initialize cluster with <sudo kubeadm init --pod-network-cidr range --kubernates-version 1.24.0
 --> setup .kube config command from output for cluster communication --> execute join command on nodes from output --> deploy calico network plugin 
 
+---------kubectl syntax------
+kubectl 	command 	type		name		flag
+		(create		pods or po	optional	-f or --filename
+		 get		deployments or 			-o or --output
+		 delete		deploy
+		 attach		namespaces(ns)
+		 apply		
+		 describe
+		 autoscale)
+
 kubectl get namespaces   ---list namespaces
 kubectl get pods --namespace or -n my-namepsace  --list pods from my-namespace if namespace name not given cmd will fetch pods from default namespace
 kubectl get pods --all-namespaces
@@ -136,7 +146,7 @@ pod lifecycle
 2. running: pod is scheduled on node and atleast one container running state.
 3. succeeded: pod exited with status 0 and will not restart
 4. Failed: all containers in pod exited but atleast one with non-zero status
-5. CrashLoopBackOff: container fail to start and tried again and again
+5. CrashLoopBackOff: container fail to start and tried again and again (Application issues,Resource constraints,missing dependancies(cm),incorrect image or version, configuration issues (env var,mounts etc),Health check failure(probes), startup delays, permission issues etc
 6. Unknown: for some reason state of pod could not be obtained. 
 
 container lifecycle:(waiting,running,terminated) 
@@ -208,13 +218,13 @@ never		never pull
 ImagePullBackOff: status condition occur while pulling image (Authen issue,n/w issue, image not availble,registry rate limit,registry not available etc)
 		To avoid above issue due to auth we can use imagepullsecrets at container level. 
 
-pause container: used to share the n/w namespace among container in pod for internal container communication plus ensure that IP address remains constant when container restart. 
+5. pause container: its design pattern used to share the n/w namespace among container in pod for internal container communication plus ensure that IP address remains constant when container restart. 
 
 imparative/declarative commands: 
 imparative: command line argument
-	kubectl run web --image=nginx:latest	--dry-run=client	--> shows what API object is being created at client side
-	kubectl get po -o wide/json/yaml				--> shows deployed pods
-	kubectl run web --image=nginx --dry-run=client -o yaml		--> gives you manifest file
+	kubectl run web --image=nginx:latest	--dry-run=client			--> shows what API object is being created at client side
+	kubectl get po -o wide/json/yaml						--> shows deployed pods
+	kubectl run web --image=nginx --dry-run=client -o yaml >pod.yaml		--> gives you manifest file
 	kubectl run web --image=nginx --label="app=hazelcast,env=prod"	--> label is key value pair
 	kubectl logs -f nginx						--> show pod logs. append -c containername -l key=value(label)	--tail=20 --since=1h
 	kubectl delete po nginx	--force --grace-period=0		--> want to force kill. grace period is 30sec default
@@ -223,10 +233,14 @@ imparative: command line argument
 	kunectl run curl --image=curlimages/curl -i --rm --restart=never -- curl IP		--> use --rm for temporary pods. 
 
 	kubectl logs/describe (events)/events -n namespace_name		--> used for debugging
+	kubectl describe pod <pod_name>
+	kubectl get events --field-selector involvedObject.name=pod_name
+	kubectl get pod <pod_name> -o jsonpath='{.spec.containers[*].name}'		--> get container names from pods. 
 
 decalarative: describing k8s objects in yaml file
-kubectl create -f podfile.yml				--> create prod
-kubectl apply  -f podfile.yml				--> update pod	
+kubectl create -f podfile.yml				--> create prod. if already exist then throws error
+kubectl apply  -f podfile.yml				--> create + update pod	
+
 
 Manifest/Spec file:   describe k8s objects in yaml file
 Manifest file has 4 mandatory fields:
@@ -248,6 +262,21 @@ Ephemeral containers: additional container(with debug utilities like bash/sh/cur
 	|________> Application container(distroless image)
 
 kubectl debug -it ephemeral-demo<pod name> --image=busybox:1.2 --target=ephemeral-demo		--> create debug container in ephemeral-demo pod
+
+Note: When using distroless images for your main application container in Kubernetes, troubleshooting can be a bit challenging
+1. sidecar container
+2. Temporary debug container
+# Add the debugging container
+kubectl edit pod <pod-name>					--> use rolling update method
+
+# Troubleshoot using kubectl exec
+kubectl exec -it <pod-name> -c debug-container -- /bin/sh
+
+# After troubleshooting, revert the pod
+kubectl apply -f original-pod-spec.yaml
+3. log analysis
+kubectl logs <pod-name> -c main-container
+
 
 ----Labels,annotations and Selectors:
 Labels are key-value pairs attached to the K8s objects like pod. run = <object name> is deafult label
@@ -307,6 +336,7 @@ kubectl get deploy
 kubectl delete deployment nginx
 kubectl rollout status deployment nginx
 kubectl rollout history deplo nginx
+kubectl rollout undo deploy nginx --to-revision=<get this revisionf rom above steps>
 kubectl set image deploy nginx nginx:1.4	--> change image of container.
 kubectl scale deplo nginx --replica=10  
 
@@ -392,7 +422,7 @@ port-forwading: used for temp creating connection with pod for debug purpose. po
 kubectl port-forward po/podname localport:podport
 kubectl port-forward po/web 8080:80				--> forward data coming on local port 8080 to pod listening on port 80 
 
-2. NodePort: exposing service on static port n each node, allowing external access to service. 
+2. NodePort(no IP allocated rather use one of nodes IP): exposing service on static port on each node, allowing external access to service. 
 port must be in the raneg of 30000-32767. its recommended to let K8s auto assign the port. NodePort uses the labels and selectors as ClusterIP
 
 spec:
@@ -404,7 +434,7 @@ spec:
     nodePort: let K8s auto assign
   type: NodePort
 
-drawback: exposing service through nodeport uses multiple IPs and corresponding node port makes it difficult for end user to access apps makes it user unfriendly.
+drawback: exposing service through nodeport uses multiple nodes IPs and corresponding node port makes it difficult for end user to access apps makes it user unfriendly.
 solution: Deploy HAProxy outside the cluster and configure it to balance traffic to the nodes using their NodePort.
 
 
@@ -434,7 +464,7 @@ Note: If we do nslookup on healess service FQDN then it resolves to backend pods
 nslookup my-headless-service.default.svc.cluster.local			--> gives backend pods IP's. each pod gets unique identity like podname.headless-servicename
 
 
-External IP: The externalIPs feature is not primarily designed for managing external IP addresses of services, especially for external databases or external applications hosted outside the K8s cluster. Instead, it's used to assign specific external IP addresses to services within the Kubernetes cluster itself.
+External IP: The externalIPs feature is not primarily designed for managing external IP addresses of services, especially for external databases or external applications hosted outside the K8s cluster. Instead, it's used to assign specific external IP addresses to services within the Kubernetes cluster itself. but does not provide load balancing. 
 spec:
   selector:
   ports:
@@ -470,7 +500,7 @@ spec:
 Note: when you create a Headless Service without selectors, you need to manage the Endpoints manually. The Endpoint object specifies the actual IP addresses and ports of the backend pods or external services that the Headless Service is responsible for.
 
 
-ExternalName: it helps to connect to teh service running outside of K8s cluster through mapping Service to dns name. IP address not allowed. 
+ExternalName: it helps to connect to the service running outside of K8s cluster through mapping Service to dns name. IP address not allowed. 
 
 apiVersion: V1
 kind: Service
@@ -694,7 +724,7 @@ env:						--> using config map as env variable
     valueFrom:
       configMapKeyRef:
         name: db_details
-        key: db_name
+        key: db_name				--> for every key you have to repeat - name and valueFrom
 envFrom:					--> if want to refer all variables from configmap
 - configMapRef:
     name: db_detais
@@ -779,7 +809,7 @@ envFrom:					--> use all keys from secret
 --------------------------------------Manual scheduling------------------
 manual scheduling is sometimes needed  to ensure that certain pods only scheduled on nodes with specialized hardware like ssd or to co-locate services to communicate frequently (DB-apps pods to reduce latency)
 K8s offer several ways to schedule pods
-1. nodeName: 
+1. nodeName:  
 simplest form but due to limitations not used. 
 apiVersion: v1
 kind: pod
@@ -795,17 +825,97 @@ spec:
 
 limitations: if node does not exist or node does not have enough resources or nodes in cloud are unpredictable 
  
-2. nodeSelector: 
-its same as nodeName however node selector use labels to assign pod on node. limitation is if node does not have label then pod fails.sets hard rules. 
+2. nodeSelector:  (every node has labels + simplest recommended form)
+its same as nodeName however node selector use labels to assign pod on node. limitation is if matching nodes are not available then pod stays in pending state.its sets hard rules. 
 
-3. Node affinity and anti-affinity:
+apiVerison: v1
+kind: Pod
+metadata:
+  name: nginx
+  lables:
+    env: prod
+spec:
+  containers:
+  - name: nginx
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+  nodeSelector: 
+     disk: ssd							--> kubectl get nodes -l disk=ssd
+
+3. Node affinity and anti-affinity: nodeAffinity is conceptually similar to nodeSelector with few key enhancements
+	1. nodeAffinity rules are more expressive. supports both soft/hard rules. 
+	2. If scheduler can't find node with matching labels, pod still be scheduled on other 	nodes (soft rules).
+	Supported Affinity rules: required --> indicates hard requirement that must be met	preferred --> indicates soft requir wch enforced but not guaranteed.
+	requiredDuringSchedulingIgnoredDuringExecution
+	requiredDuringSchedulingRequiredDuringExecution
+	preferredDuringSchedulingIgnoredDuringExecution
+	preferredDuringSchedulingRequiredDuringExecution   
+
+apiVerison: v1
+kind: Pod
+metadata:
+  name: nginx
+  lables:
+    env: prod
+spec:
+  containers:
+  - name: nginx
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+  affinity:
+    nodeAffinity:
+       preferredDuringSchedulingIgnoredDuringExecution:
+       - weight: 1						--> 1-100 higher the weight, higher chances of scheduling pod on that node. if >1 affinity rules then
+         preference:						based on weight one rule is selected	
+            matchExpression:
+            - key: disk
+              operator: in
+              value: 
+              - ssd
+
+Note: Anti-Affinity is opposite to affinity. anti-affinity looks for matching label and avoid scheduling pod on that node. 
 
 4. Inter-pod affinity and anti-affinity
-5. Taints and toleration
 
+5. Taints(nodes)  and toleration(pods): Taints are opposite to nodeSelector. They allow a node to repel a set of pods. Taints are applied to nodes(lock). Tolerations are applied to pods(key). In Short, pod should tolerate the nodes taint in order to run in it. like having correct key with pod to unlock node and enter it. 
+
+By default master nodes are tainted, so you can deploy .
+kubectl describe node node-name | grep -i taint			--> to check taints applied on node. 
+kubectl taint node node-name key=value:taint-effect		--> add taint to the node
+kubectl taint node node-name key=value:tant-effect-		--> to remove taint
+
+taint effetcs:
+1. NoSchedule: hard requirement. unless pod has matching toleration, will not be schedule on node.  
+2. preferNoSchedule: soft version of NoSchedule. 
+3. NoExecute: node will immediately evict all pods without matching toleration and new pod will not be scheduled on to node. 
+
+apiVerison: v1
+kind: Pod
+metadata:
+  name: nginx
+  lables:
+    env: prod
+spec:
+  containers:
+  - name: nginx
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+  tolerations:
+  - key: "app"							
+    operator: in
+    value: "nginx"
+    effect: NoSchedule
+
+adding tolerations: 
+1. if the operator is Exists, the value is not needed			
+2. Only operator matches all the keys and tolerations. 
+3. Empty effect matches all effects. 
 
 ----------------Resource limits----------------
-By defauld, Pods run with unbounded CPU and Memory limits. Resource limits prevents single app from using all available resources and protect other apps from resource starvation.
+By default, Pods run with unbounded CPU and Memory limits. Resource limits prevents single app from using all available resources and protect other apps from resource starvation.
 Request and Limits are set for each container. 
 Request: what container is gauranted to get	Limits: What container should never exceed  
 
@@ -1028,6 +1138,30 @@ spec:
             - "echo Hello from the CronJob!"
 
 
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+   name: pwd-runner
+   namespace: one
+spec:
+  schedule: "*/1 * * * *"
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 10						--> terminate cronjob if failed to execute within 10s
+      template:
+        metadata:
+          labels:
+            name: pwd-runner
+        spec:
+          containers:
+          - name: batch
+            image: busybox:stable
+            command: ["/bin/sh"]
+            args:
+            - "-c"
+            - "pwd"
+          restartPolicy: OnFailure
+
 Probes: are mechanisms used to determine the health of a container. 3 types
 1. Liveness Probe: Checks whether the container is still running. If the liveness probe fails, K8s restarts the container.
 
@@ -1053,7 +1187,7 @@ spec:
 
 ----------------------Persistent Volumes----------------------------
 With persisted volume(PV) data is persisted regardless of apps lifecycle container. pod,node or even cluster itself. 
-PV consiste of 2 things
+PV consist of 2 things
 1. backend storage called persistentVolume: 
    2 ways to provision as Persistent Volume. 
 	1. Static: manually created by admin
@@ -1067,7 +1201,7 @@ PVC: PersistentVolumeClaim (PVC) is an abstraction that represents a request for
 each claim can request size and access modes. 
 
 Reclaim Policy(persistentVolumeReclaimPolicy): tells us what happens to PV when PVC is deleted. 
-1. delete: deletes volume content and makes volume available to be claimed agan by other pvc  				--> default if not specified
+1. delete: deletes volume content and makes volume available to be claimed again by other pvc  				--> default if not specified
 2. Retain: PV content is persisted even after pvc deleted. it can't be reused until admin manually reclaim it. 
 
 volume Binding mode:
@@ -1396,3 +1530,230 @@ kubectl config get-contexts: Display available contexts.
 
 Help:
 kubectl --help: Display help for kubectl and its subcommands.
+
+
+
+------------------------------Interview Questions-----------------------------------
+1. what is difference between docker and kubernetes? 
+docker is open source containerized platform whereas K8s is container orchestration env.
+docker main purpose is to solve code portability issue and k8s offeres capabilities like deployment,auto scaling, load balancing etc 
+
+2. what are main components of K8s?
+on broad level we cna devide k8s components into 2 parts
+1. control plane
+2. data plane or worker nodes
+
+control plane consist of components like Kube API Server,Scheduler,Kube Controller manager,etcd and cloud controller manager
+whereas data planes consist of kubelet,kubeproxy and containerd 
+
+
+3. what are the main diffences between docker swarm and kubernetes?
+1. Managed Services:
+Docker Swarm: While Docker Swarm itself is easy to install, it lacks widely adopted managed services from cloud providers. This means organizations using Docker Swarm might need to invest more effort in managing the control plane themselves.
+
+Kubernetes: Kubernetes, being the more popular choice, has managed services offered by major cloud providers such as Google Kubernetes Engine (GKE), Amazon EKS, and Azure Kubernetes Service (AKS). These managed services reduce the operational overhead of managing the control plane, allowing teams to focus more on application development and deployment.
+
+2. GUI for Interactive Orchestration:
+Docker Swarm: Docker Swarm does not have a built-in graphical user interface (GUI) for interactive orchestration.
+Kubernetes: Kubernetes often leverages tools like Kubernetes Dashboard to provide a graphical interface, making it easier for users to visualize and manage resources 
+within the cluster.
+
+3. Package Manager:
+Docker Swarm: Docker Swarm does not have its own package manager like Helm.
+Kubernetes: Kubernetes has Helm, a widely used package manager, which simplifies the deployment and management of applications through pre-configured packages called charts.
+
+4. Integration with Third-Party Tools:
+Docker Swarm: While Docker Swarm is easy to install, it may lack extensive integration with third-party tools and plugins commonly used in the Kubernetes ecosystem.
+Kubernetes: Kubernetes has a rich ecosystem with many third-party tools and plugins, including monitoring tools like Prometheus and Grafana, logging solutions like EFK (Elasticsearch, Fluentd, Kibana), and continuous delivery tools like ArgoCD. This makes Kubernetes more versatile and adaptable to various use cases.
+
+5. Community and Industry Standard:
+Docker Swarm: Docker Swarm has a smaller community compared to Kubernetes, and it is not as widely considered an industry standard for container orchestration.
+Kubernetes: Kubernetes has a large and active community, making it an industry-standard tool with widespread adoption and support.
+
+6. swarm has basic auto scalling like replica and glabal Whereas K8s supports advance auto scaling concepts like HPA,cluster auto scaler,karpenter etc
+
+
+4. what is namespace in k8s?
+namespaces provide a way to partition cluster resources between multiple users, teams, or applications. You can use namespaces to create isolated environments. 
+
+
+5. what is kube-proxy?
+is network proxy. It runs on each node and provides networking between containers and services(single entrypoint which manages backend nodes) in the cluster by maintaining iptable
+
+
+6. How 2 containers inside a pod communicate with each other?
+1. localhost communication: 
+when you have multiple containers running inside the same pod, they share the same network namespace. and containers can talk to each other using localhost or loopback address and container port. "pause container" plays crutial role here for holding the network namespace open and keeping the network namespace of the pod alive.
+
+2. service discovery: Containers can use Kubernetes services for service discovery. Each container exposes its service on a specific port, and other containers refer to it using the service name and port.
+
+
+7. what is pause container?
+pause container: its design pattern used to share the n/w namespace among container in pod for internal container communication plus ensure that IP address remains constant when container restart. it's automatically injected into each pod.
+
+
+8. what is flannel?
+open-source networking solution designed for container orchestration. It is commonly used in Kubernetes clusters to provide a simple and scalable overlay network for container communication. there are other Kubernetes networking solutions available, such as Calico, Weave, and Cilium, each with its own features and characteristics.
+
+Flannel: simple and quick setup, small scale deployment, lower env
+Calico: Advance network policies (strict security,n/w policy), Large scale deployments, strong communitiy, prod etc
+EKS use VPC-CNI plugin
+
+9. How the 2 pods communicate with each other?
+Service discovery: through service dns name or clusterIP
+pod-pod communication through IP (less common)
+
+by default pods in different ns cannot talkt o each other. if they want to communicate the use service FQDN. pod-1 can talk to pod-2 using pod-2 FQDN 
+curl pod-2.ns2.svc.cluster.local
+
+
+10. what is master and manion?
+In the context of Kubernetes, the terms "master" and "minion" have been historically used, but more commonly, you'll hear the terms "control plane" and "worker nodes"
+
+11. How would you test the manifest without actually executing it?
+we can us --dry-run=client -o yaml option 
+
+
+12. How do you initiate a rollback for an application?
+we can check the history of changes made using rollout command:
+kubectl rollout history deploy <deploy-name>			--> it will show me revision and change cause
+kubectl rollout undo deploy <deploy-name>			--> only dry run
+kubectl rollout undo deploy my-deployment --to-revision=3 --record --dry-run='false' --save-config --annotation="rollback.reason=FixingIssue123"
+
+Note: without --dry-run='false' it only simulate rollback but will not rollback in actual. --record log the changes to history --annotation helps to provides cause 
+
+
+13. How can I access containers running inside pod from browser ?
+To access containers running inside a pod from your local browser, you can use the kubectl port-forward command to create a secure tunnel between your local machine and the pod.
+kubectl port-forward pod/<pod-name> [local-port]:[pod-port]
+
+
+14. How to configure default ImagePullSecret for any deployment?
+To attach an image pull secret to a service account in Kubernetes, you can create or update the service account to include the desired image pull secret. This is useful when you want to avoid putting the image pull secret directly in individual deployments or replica sets.
+1. Create a Docker Config JSON File:
+my-secret.json
+{
+  "auths": {
+    "your-registry-url": {
+      "username": "your-username",
+      "password": "your-password",
+      "email": "your-email"
+    }
+  }
+}
+
+2. create k8s secret
+kubectl create secret generic my-image-pull-secret --from-file=.dockerconfigjson=my-secret.json --type=kubernetes.io/dockerconfigjson
+
+3. attach secret to SA
+kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "my-image-pull-secret"}]}'
+
+
+15. What is the process of granting access to an EKS cluster for a new user?
+1. Create an IAM user or group: provide necessary permission to access k8s/eks cluster 
+2. configure aws cli
+3. eks cluster access: 
+	1. IAM role mapping with aws-auth config map: Update the aws-auth ConfigMap in the kube-system namespace to map the IAM user or group to a K8s RBAC role
+	apiVersion: v1
+	kind: ConfigMap
+	metadata:
+  		name: aws-auth
+  		namespace: kube-system
+	data:
+  	   mapUsers: |
+    	   - userarn: arn:aws:iam::ACCOUNT-ID-WITHOUT-HYPHENS:user/USERNAME
+      	     username: USERNAME
+      	     groups:
+           - system:masters
+	2. update kubeconfig file
+	aws eks update-kubeconfig --name your-cluster-name
+4. K8s RBAC setup
+setup SA and roleBinding (optional)	--> If you want to further restrict access using Kubernetes RBAC, create a Kubernetes Service Account for the new employee and create a RoleBinding associating the Service Account with specific roles.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: employee-role
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: employee-binding
+  namespace: default
+subjects:
+- kind: User
+  name: USERNAME
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: employee-role
+  apiGroup: rbac.authorization.k8s.io
+
+
+16. I have created a pod but status is pending. how to debug?
+We can use the kubectl describe command to check pods detailed info which includes state,label,volume and events etc
+kubectl describe pod pod-name 
+
+
+
+17. say dev team has deployed nginx web server successfully, but webpage is not accessibe. how to you debug?
+1. check pod events by describe command
+2. check the svc details whether service match the deploy labels
+3. check server logs usig kubectl logs -f pod-name  
+4. if everything looks good then check what error you are getting while accessing web page (like connection refuse)
+5. check web server config by kubectl exec command		--> found server post and svc port are different 
+
+
+18. what is daemonset and use case of daemonset?
+DaemonSet if K8s object which makes sure that each pod replica running on each node. example: log collecto agents like fluentbit,monitoring agents like node-exporter
+
+
+19. How to automate K8s app?
+tell the jenkins pipeline steps
+
+20. How to secure K8s?
+K8s security
+	1. Applicaion security
+		Pod,namespace,node
+		RBAC,IRSA
+	2. DevSecOps: 
+		authorization (IAM roles)
+		Scan images through linting tools like trivy
+		Scan running containers (AWS ECR vul scanning)
+
+21. How to cost/performance optimize K8s apps?
+Control plane cost(fixed not much room for improvement)
+worker node numbers and types:
+	1. Pod resource specification
+	2. Unused CPU or memory allocation
+	3. Detect CPU/Memory waste (install metrics server)
+
+
+22. Tell me challenge you faced in K8s apps?
+A challenge faced was upgrading a Kubernetes cluster to a new version on EKS with hundreds of nodes. The challenge included creating and rehydrating AMIs while keeping the application highly available and maintaining pod disruption budget. 
+The solution involved using EKS managed node groups,AWS provides patches AMIs, app wil be up and running with high availability, respect the pdo disruption budget.
+
+2nd challenge was related to IP address scarcity:
+every pod uses the Ip address from VPC and as apps grows we run short of IP's so solution is we need to add subnet to the existing node group vpc so increase the IP count. 
+
+
+what is pod disruption budget?
+A Pod Disruption Budget (PDB) is a policy in Kubernetes that allows you to control the disruption caused by voluntary disruptions, like scaling down, node maintenance or node upgrades. it specifies the maximum number or percentage of pods that can be simultaneously disrupted (unavailable) during voluntary disruptions.
+
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: example-pdb
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: example		--> label of pods
+ 
+it acts as safety mechanism to prevent aggressive scaling-down actions. 
+
