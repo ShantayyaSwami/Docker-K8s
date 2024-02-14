@@ -150,7 +150,7 @@ docker container rm <ID>			--> remove container. can't remove running container 
 docker run -d --name=<name> <image name>	--> create and start container in detached mode with cntainer name
 docker log -f <container id>			--> check runtime logs like tail in linux. -f: follow
 docker rm -f ${docker ps -aq}			--> remove all containers forcefully. -q shoes only ID
-docker rm $(docker ps -aqf status=exited)	--> remove only exited containers
+docker rm $(docker ps -aqf status=exited)	--> remove only exited containers. -f filter
 docker ps -q					--> shows only running containers. 
 
 docker cp source destination		--> copy files from host to container & vice-versa <docker cp nginx.conf web:/temp> --> seems like scp
@@ -158,7 +158,7 @@ docker stats				--> shows memory,cpu consumption of container.
 
 Note: container goes into exited state when container fails/completes or container asking for something which we are not giving. 
 docker run -it ubantu			--> start ubantu and provide interactive mode(STD_IN terminal) with -i and tty terminal with -t (STD_OUT terminal)
-ctr+pq					--> to come out of container without exit
+ctrl+PQ					--> to come out of container without exit
 
 docker exec container_ID command		--> execute the command inside running container. 
 
@@ -280,9 +280,9 @@ ENTRYPOINT["java","-jar","demo.jar"]
 ex2:
 FROM git-alpine as gitclone 
 WORKDIR /app
-git clone <url>
+RUN git clone <url>
 
-FROM maven:alpine as build
+FROM maven-alpine as build
 WORKDIR /app
 COPY --from=gitclone /app/target/employee-application/pom.xml .
 COPY --from=gitclone /app/target/employee-application/src src
@@ -430,7 +430,7 @@ pros: network performance (low latency required then) + easy network troubleshoo
 cons: container ports are exposed to host directly causing sec vul + removes network isolation can be security risk
 ex: docker run -d --name c1 --net host nginx: latest
 
-none network: containers will only have local loopback address. cotainers kept in total isolation. when want to disable networking functionality for specific container. 
+none network: containers will only have local loopback address. containers kept in total isolation. when want to disable networking functionality for specific container. 
 ex: docker run -d --name c1 --net none ngnix: latest
 
 
@@ -499,9 +499,9 @@ services:
     volumes:
     networks:
 volumes: <optinal>				--> whenever keyword appended with 's indicates list
- - my_db
+ my_db
 networks: <optional>
- - my_net
+ my_net
 
 
 Note: volumes and networks are same as 
@@ -752,8 +752,7 @@ ONBUILD COPY . /app					--> used very less
 
 
 ---------------------------------------Interview Questions----------------------------------
-
-Docker best practices:
+1.Docker best practices:
 1. Use the docker official images as base image
 2. Use Specific base image version (Latest images are tent to be unstable)
 3. Use small-sized official images  
@@ -764,21 +763,21 @@ Docker best practices:
 8. Scan images for vulnerabilities. 
 
 
-challenges faced in docker:
+2. challenges faced in docker:
 1. docker is single daemon process can cause single point of failure. (podman solution)
 2. docker daemon runs as root user making it vulnerable If the daemon is compromised, it potentially provides access to the entire host system.
 3. docker does not provide inbuit credential management mechanism we need to depend upon third party integration 
 
-what is docker?
+3. what is docker?
 "Docker is an open-source containerization platform for developing, packaging, and running applications consistently across various environments. In simple terms, it allows a process to run in a standalone environment with its dedicated space and resources, achieved through the use of namespaces and cgroups, which are features of the operating system."
 
-what is docker image?
+4. what is docker image?
 Docker image is an immutable package containing all necessary components like code,runtime liberaries,dependancies,chunks of os etc to run the software. 
 
-what is container?
+5. what is container?
 container is an active instantiation or runtime execution of an image within the Docker environment. container is a process running in standalone env with its own space and resources through cgroups and namespaces. its like light weight vm.
 
-How VM are different from containers?
+6. How VM are different from containers?
 1. Resource efficiency: light weight/heavier
 2. speed and performance: start quickly/taks long time
 3. islation: use kernal feature like cgroups and namespaces /stronger isolation with its own guest os
@@ -786,7 +785,7 @@ How VM are different from containers?
 5. size: small/large
 
 
-what is docker lifecycle?
+7. what is docker lifecycle?
 1. User Interaction:
 The Docker lifecycle typically begins with user interaction through the Docker client, which communicates with the Docker daemon.
 2. Connection to Docker Daemon:
@@ -797,12 +796,13 @@ Before creating a container,
  /etc/docker/daemon.json, for authentication details to access private repositories.
 5. Container Creation:
 Docker daemon creates a container based on that image. This involves setting up namespaces, cgroups, and other isolation mechanisms to ensure the container runs independently.
+
 Container Lifecycle:
 1. Created: The container is created but not yet started.
 2. Running: The container is actively running.
 3. Exited: The container has completed its execution or has been manually stopped. This can include a "succeeded" phase if the container completed its task successfully.
 
-what are different docker components?
+8. what are different docker components?
 1. docker cli
 2. docker daemon
 3. docker registry
@@ -813,7 +813,7 @@ what are different docker components?
 8. docker compose
 
 
-differce between ADD/COPY, ENTRYPOINT/CMD,ARG/ENV?
+9. differce between ADD/COPY, ENTRYPOINT/CMD,ARG/ENV?
 COPY ->  copy file from host to image
 ADD -> similar to COPY but also pull files using URL and extract archive into loose file in images
 
@@ -826,7 +826,7 @@ use --build-arg option to override it while building image.
 ENV  ->  set env variables which is used at runtime(container). use -e option to override it while launging container.
 
 
-what are different types of docker network?
+10. what are different types of docker network?
 1. Bridge Network (Default):
 Description: This is the default network mode in Docker. It allows containers to communicate with each other using a virtual Ethernet bridge. Each container connected to the bridge has its own unique IP address.
 Communication: Containers can talk to each other using these IP addresses. Docker also provides a DNS resolver for easy communication between containers using their names.
@@ -849,12 +849,12 @@ Port Mapping: Port mapping in MacVlan is similar to the host network, with a one
 
 
 
-what is multi-stage build?
+11. what is multi-stage build? and write a sample multistage muild for java or python application
 Helps to build docker container in multiple stages allowiing us to copy artifacts from one stage to other making containers light weight. 
 
 
 
-what steps you would take to secure containers?
+12. what steps you would take to secure containers?
 1. Use distroless images (Regularly update base images to patch known vulnerabilities. Even distroless images may need updates.)
 2. Implement network isolation (If container networking is not properly configured, containers may have overly permissive network access, potentially exposing sensitive services to unauthorized entities.) 
 3. use image vul scanning usitilies like Trivy,anchore engine etc ( Integrate vulnerability scanning into your CI/CD pipeline to catch issues early in the development process. Regularly scan and update images in production.)
@@ -897,7 +897,7 @@ review results --> The checks are categorized into sections such as
 Note: By default, processes in a Docker container run as the root user within the container's user namespace. use non root user to run containers too.
 
 
-how to run docker daemon as non-root user?
+13. how to run docker daemon as non-root user?
 By default, the Docker daemon runs with root privileges. To enhance security, consider running the Docker daemon as a non-root user.
 /etc/docker/daemon.json
 {
@@ -906,7 +906,7 @@ By default, the Docker daemon runs with root privileges. To enhance security, co
 Ensure that the specified user has the necessary permissions and is a member of the docker group.
 
 
-how to run containers as non-root user?
+14. how to run containers as non-root user?
 1. Specify User During Container Run:
 docker run -u or --user <UID>:<GID> your-image
 
@@ -943,8 +943,8 @@ spec:
       runAsUser: 1000
 
 
-What is default docker home and can you change docker home?
-/var/linb/dcoker
+15. What is default docker home and can you change docker home?
+/var/lib/dcoker
 Yes we can change it by changingin /etc/docker/daemon.json file
 /etc/docker/daemon.json
 {
@@ -952,17 +952,17 @@ Yes we can change it by changingin /etc/docker/daemon.json file
 }
 
 
-Can you mention docker command?
+16. Can you mention docker command?
 docker version/info/top container/stats/run/ps/exec/pull/push/inspect container
 
-How to check logs in docker?
+17. How to check logs in docker?
 docker logs -f -t<timestamp> -n 100 containername
 
-What is CoW (copy on write)?
+18. What is CoW (copy on write)?
 docker image is read only layers when we create containers from images then writable layer gets created on top of read only layers. docker kill will delete the fs.
 
 
-How do you push docker images t insecure registries?
+19. How do you push docker images t insecure registries?
 we can update registry details under /etc/docker/daemon.json file 
 {
   "insecure-registries": ["url"]
@@ -970,11 +970,11 @@ we can update registry details under /etc/docker/daemon.json file
 sudo systemctl restart docker
 
 
-How do you save the changes done to container?
+20. How do you save the changes done to container?
 1. stop the container
 2. use docker commit id image_name:tag
 
-How do you clean up docker host?
+21. How do you clean up docker host?
 we can docker prune command or use custome docker rm command to clean up space
 docker system df
 docker rm -f $(docker ps -qa)
@@ -983,12 +983,21 @@ docker system prune -a 						--> to remove all unused images
 docker rmi $(docker images -f "dangling=true" -q)		--> to remove only dagling images
 
 
-How do you control the startup order of containers?
+22. How do you control the startup order of containers?
 we can use the depeds_on to handle the startup order.
 
 
-How will you customize docker compose files for different enviroments?
+23. How will you customize docker compose files for different enviroments?
 we can specify multiple compose files in single command to combine multiple compose files 
 docker-compose -f 1.yaml -f 2.yaml config		--> it will show aggregated compose file output. here 2.yaml file contents will override 1.yaml contents 
 docker-compose config					--> run this with modified compose file
 
+
+24. How do you debug the exited container?
+25. Can you use Multiple FROM in DockerFile ?
+26. How can we pass an argument to DockerFile?
+27. Can we run the container inside the container?
+docker run -it --privileged <parent_image> bash
+28. What happens when you delete /var/lib/docker/overlay?
+29. How do you push the image to DockerHub?
+30. Why do you change the name of the image using the tag command in docker?

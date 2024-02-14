@@ -75,7 +75,7 @@ During the time gap, if an attacker can manipulate the file system, particularly
 
 
 
-Note: container scanning is mostly happen on fina image however to tighten the security we can use trivy to scan intermediate images.
+Note: container scanning is mostly happen on final image however to tighten the security we can use trivy to scan intermediate images.
 Example:
 FROM adoptopenjdk/openjdk11:alpine-slim as build
 WORKDIR /workspace/app
@@ -100,3 +100,9 @@ COPY --from=build ${DEPENDENCY}/BOOT-INF/lib /app/lib
 COPY --from=build ${DEPENDENCY}/META-INF /app/META-INF
 COPY --from=build ${DEPENDENCY}/BOOT-INF/classes /app
 ENTRYPOINT ["java","-Dserver.port=${PORT}","-cp","app:app/lib/*","com.example.demo.DemoApplication"]
+
+
+
+Trivy and Anchore primarily focus on scanning container images for vulnerabilities and security risks.
+Trivy is specifically focused on vulnerability scanning, while Anchore provides a broader range of security and compliance features.
+Hadolint focuses on linting Dockerfiles to ensure adherence to best practices and standards, rather than scanning container images for vulnerabilities.

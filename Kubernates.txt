@@ -38,7 +38,7 @@ Cloud controller manager --> provides an interface between K8s and cloud platfor
 
 
 K8s Nodes: 
-are machines where containers managed by the cluster run. cluster can have any number of  nodes. 
+are machines where containers managed by the cluster run. cluster can have any number of nodes. 
 Various node components manage containers on machine & communicate with control plane.
 
 Kubelet --> k8s agent runs on each node. It communicate with control plane(API server) about state of node and ensures that containers(through CRE i.e containerd or docker) run on its node as instructed by control plane. 
@@ -261,7 +261,7 @@ ex: --command ping -- 8.8.8.8
 Ephemeral containers: additional container(with debug utilities like bash/sh/curl etc) in pod for debug purpose.  Not restarted when exit or pod removed or restarted.
 	|________> Application container(distroless image)
 
-kubectl debug -it ephemeral-demo<pod name> --image=busybox:1.2 --target=ephemeral-demo		--> create debug container in ephemeral-demo pod
+kubectl debug -it ephemeral-demo<pod name> --image=busybox:1.2 --target=ephemeral-demo<container>		--> create debug container synamically inside pod
 
 Note: When using distroless images for your main application container in Kubernetes, troubleshooting can be a bit challenging
 1. sidecar container
@@ -387,7 +387,7 @@ spec:
 kubectl get ns							--> list namespaces
 kubetl delete ns dev						--> very careful while deleting ns. we can assign roles to limit actions 
 kubectl deploy -f specfile.yml -n <namespace name>		--> create deployment in perticular namespace
-
+ 
 curl pod-ip.ns.pod.cluster.local				--> to communicate with pod in diff ns using pod-dns
 
 
@@ -423,7 +423,7 @@ kubectl port-forward po/podname localport:podport
 kubectl port-forward po/web 8080:80				--> forward data coming on local port 8080 to pod listening on port 80 
 
 2. NodePort(no IP allocated rather use one of nodes IP): exposing service on static port on each node, allowing external access to service. 
-port must be in the raneg of 30000-32767. its recommended to let K8s auto assign the port. NodePort uses the labels and selectors as ClusterIP
+port must be in the range of 30000-32767. its recommended to let K8s auto assign the port. NodePort uses the labels and selectors as ClusterIP
 
 spec:
   selector:
@@ -444,6 +444,7 @@ drawback: It can incur additional costs, especially in cloud environments where 
 solution: Ingress controller with LB -> allow you to expose multiple services through a single load balancer and public IP address. 
 load balancer sharing -> share a single load balancer among multiple services, reducing the number of provisioned IP addresses.
 
+Note: In EKS service type=LoadBalancer creates classic load balanacer. if we use Ingress aws creates application load balancer. and for NLB to use we need to instal AWS load balancer controller using helm charts --> service=LoadBalancer will create NLB 
 
 4. Headless Service(no IP allocated): (very imp for statefulset apps) It is used when you don't need a single, stable IP address for the service, and you want to directly reach individual pods backing the service(pod-pod communication).The service creates DNS records for each pod backing the service, allowing you to discover individual pod IPs using DNS. commonely used in database clusters, statefulsets etc
 Use case: Headless services are often used for scenarios where direct communication with individual pods is necessary, such as in StatefulSets for databases.
@@ -490,8 +491,8 @@ spec:
 apiVersion: v1
 kind: Endpoint
 metadata:
- name: my-headless-endpoint
-spec:
+ name: headless-endpoint
+subset:
  - addresses:
     - 201.0.102.1						--> it can be external apps IP address which can be connected from K8s cluster. 
    ports:  
@@ -639,7 +640,7 @@ kubectl apply -f ingress.yaml
 ----------------------------------K8s Volumes------------------------------
 volume is dir accessible to all containers running in pod. containers are ephemeral so to persist the data, K8s provide volumes. 
 Ephemeral volumes: 
-1. emptyDir(pod): temp storage created and managed by the lifecycle of pod. volume is empty on pod creation and volume gets deleted when pod stopped,rescheduled etc
+1. emptyDir(pod): temp s torage created and managed by the lifecycle of pod. volume is empty on pod creation and volume gets deleted when pod stopped,rescheduled etc
 apiVersion: v1
 kind: Pod
 metadata:
@@ -720,7 +721,7 @@ data:
   db_env: prod
 ---
 env:						--> using config map as env variable
-  - name: DB_NAME
+- name: DB_NAME
     valueFrom:
       configMapKeyRef:
         name: db_details
@@ -770,7 +771,7 @@ spec:
 
 -----Secrets--------
 Secret is K8s obj used to store confidential data like pass,ssh key, tokens etc. same as configMap but specifically intended to hold confidential data.
-Pods can consue secrets as
+Pods can consume secrets as
 1. Env var
 2. configuration file in volume
 3. pull secrets by kubelet
@@ -806,8 +807,26 @@ envFrom:					--> use all keys from secret
 - secretRef:
     name: db_credentials 
 
+
+---------------K8s secret data encryption-----------------
+KMS: indeed uses envelope encryption internally
+KMS uses envelope encryption by default when you encrypt data using KMS --> KMS generates a data encryption key (DEK) to encrypt the plaintext data --> The DEK is then encrypted with a Customer Master Key (CMK), creating the envelope --> The encrypted DEK and the encrypted data (in the envelope) are then used and stored together.
+
+create DEK using KMS CMK --> plain text + DEK --> encrypted file --> encrypted file + DEK --> envelop
+
+Secret Encryption at implementation:
+1. create customer keys and encode it.
+2. configure encryption configuration YAML (into in K8s 1.25) /etc/kubernetes/pki/ --> mkdir kms and put yaml file
+3. configure encryption configuration @ API server. /etc/kubernetes/manifest/api-server --> vi api-server
+--encryption-provider-config = /etc/kubernetes/pki/yaml file from step2 
+4. create secret and test  --> cd /etc/kubernetes/etcd/member/snap --> cat db
+or you can exec unto etcd pod and check
+
+kubectl get secret --all-namespaces -o json | kubectl replace -f -		--> used to encrypt all available secrets 
+
+
 --------------------------------------Manual scheduling------------------
-manual scheduling is sometimes needed  to ensure that certain pods only scheduled on nodes with specialized hardware like ssd or to co-locate services to communicate frequently (DB-apps pods to reduce latency)
+manual scheduling is sometimes needed to ensure that certain pods only scheduled on nodes with specialized hardware like ssd or to co-locate services to communicate frequently (DB-apps pods to reduce latency)
 K8s offer several ways to schedule pods
 1. nodeName:  
 simplest form but due to limitations not used. 
@@ -879,7 +898,8 @@ Note: Anti-Affinity is opposite to affinity. anti-affinity looks for matching la
 
 4. Inter-pod affinity and anti-affinity
 
-5. Taints(nodes)  and toleration(pods): Taints are opposite to nodeSelector. They allow a node to repel a set of pods. Taints are applied to nodes(lock). Tolerations are applied to pods(key). In Short, pod should tolerate the nodes taint in order to run in it. like having correct key with pod to unlock node and enter it. 
+5. Taints(nodes)  and toleration(pods): a taint is a property applied to a node to repel certain pods from being scheduled onto that node, unless the pods have corresponding tolerations. In Short, pod should tolerate the nodes taint in order to run in it. like having correct key with pod to unlock node and enter it. 
+taints and tolerations are used to control which nodes can schedule Pods.
 
 By default master nodes are tainted, so you can deploy .
 kubectl describe node node-name | grep -i taint			--> to check taints applied on node. 
@@ -968,7 +988,7 @@ spec:
    limit.cpu:						m --> millicore
    limit.memory:
 
-Note: If you set resourceQuota for namespace then all the pods need to set the resources in the container definition therwise pod will not be scheduled. 
+Note: If you configure ResourceQuota in a namespace, it does not mandate that each container within a pod must configure resource constraints individually. Instead, it sets limits on the total resource usage across all containers in the namespace.
 drawback: obj created within defined namespace can still utilize all available resources starving others. --> LimitRange can overcome this problem by setting min&max limit on obj level in namespace. 
 
 ---LimitRange-------
@@ -1036,7 +1056,7 @@ ingress: 				--> [] shows all traffic blocked
     - podSelector:
         matchLabels:
            key: value
-   ports: 
+    ports: 
     - protocol:
       port: 
 4. Egress Block
@@ -1287,6 +1307,8 @@ Average Value: Scale to achieve an average value across multiple pods.
  
 VPA: Automatically adjusts the resource requests of individual pods.
 
+kubectl autoscale deployment/myapp-deployment --min=2 --max=5 --cpu-percent=50			--> HPA imperative comand
+
 ------------------------StatefulSets--------------------
 Headless services are mainly used to connect to database cluster However, in headless service if pods gets restaretd then their IP's and DNS(which also includes IP's like IP.service.ns.svc.cluster.local) also get changed so it will be challenging job to connect to dedicated backend pod.
 
@@ -1343,6 +1365,39 @@ SSL handshake:
 
 
 --------------------------------RBAC-------------------------
+Creating Users and Groups in K8s:
+Kubernetes itself doesn't manage users and groups directly; instead, it relies on an external authentication system. Common authentication systems used with Kubernetes include:
+Integration with an existing identity provider (like LDAP or Active Directory) through authentication modules such as OpenID Connect (OIDC).
+Integration with cloud provider IAM systems (like AWS IAM for Amazon EKS clusters).
+You typically create users and groups in your chosen authentication system and then configure Kubernetes to recognize them.
+For example, in Amazon EKS, you can create IAM users and groups in the AWS Management Console or through the AWS CLI. You then map these IAM entities to Kubernetes users and groups using the aws-auth ConfigMap.
+
+Creating Service Accounts:
+In Kubernetes, a service account is an identity that is used by pods to authenticate with the Kubernetes API server and to access other resources within the cluster. Each pod running in a Kubernetes cluster can be associated with a service account, which allows the pod to perform actions and interact with other Kubernetes objects.
+
+Summary:
+1. IAM Role to Kubernetes User/Group Mapping (e.g., using aws-auth ConfigMap) grants initial access to the Kubernetes cluster.
+2 ways to do mapping
+kubectl edit -n kube-system configmap/aws-auth
+or
+eksctl create iamidentitymapping --cluster <cluster-name> --arn <IAM-role-ARN> --username <K8s-username>
+update kubeconfig
+
+2. Kubernetes RBAC (roles and role bindings, or cluster roles and cluster role bindings) further restricts and controls what actions users or groups can perform within the cluster, allowing you to enforce least privilege access principles and security policies.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-auth
+  namespace: kube-system
+data:
+  mapRoles: |
+    - rolearn: arn:aws:iam::123456789012:role/my-iam-role
+      username: my-team-member
+      groups:
+        - system:masters
+
+
 RBAC is security feature in K8s lets you create fine grained permissions to manage what actions users and workloads can perform on resources in your cluster. 
 Default admin user has full access to K8s resources. but not every user needs unrestricted access. so RBAC used to restrict access to K8s cluster based on role.
 RBAC policies used to manage access rights of system user (user and groups) and service accounts. 
@@ -1391,6 +1446,14 @@ roleRef:							--> References the Role (developer-role) to bind.
   name: developer-role
   apiGroup: rbac.authorization.k8s.io
 
+--------------------------------------EKS Security-----------------------------
+1. Image security: Trivy
+2. User or cluster security: IRSA
+3. Network security: SG+ Network Policies
+4. Data security: Encryption at rest or encryptionConfiguration kind in K8s
+5. runtime container security: Falco or sysdig secure tools + enable audit logs for control plane(disabled by default)
+
+
 -------------------RBAC Analyser-------------------------------------------
 RBAC permissions audit tool that help you to  scan your whole cluster to locate any risky permissions.
 RBAC analysis tools:
@@ -1413,7 +1476,7 @@ kubescan --risky-clusterroles
 kubescan --risky-any-roles
 -------------------------------------- 
 
-
+------------------------------------------------------------------------------------
 
 Self draining K8s node: 
 when performing maintainance, you may sometimes need to remove K8s node from service. To do this, you can drain the node. 
@@ -1706,7 +1769,7 @@ kubectl describe pod pod-name
 2. check the svc details whether service match the deploy labels
 3. check server logs usig kubectl logs -f pod-name  
 4. if everything looks good then check what error you are getting while accessing web page (like connection refuse)
-5. check web server config by kubectl exec command		--> found server post and svc port are different 
+5. check web server config by kubectl exec command		--> found server port and svc port are different 
 
 
 18. what is daemonset and use case of daemonset?
@@ -1755,5 +1818,10 @@ spec:
     matchLabels:
       app: example		--> label of pods
  
-it acts as safety mechanism to prevent aggressive scaling-down actions. 
+it acts as safety mechanism to prevent aggressive scaling-down actions. This helps to ensure that your applications remain available even if some of their pods are terminated or evicted.
+
+
+Operator?
+https://medium.com/developingnodes/mastering-kubernetes-operators-your-definitive-guide-to-starting-strong-70ff43579eb9
+https://teckbootcamps.com/complete-practical-example-of-kubernetes-crd-operator-kubebuilder/
 

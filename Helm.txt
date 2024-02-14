@@ -4,7 +4,7 @@ order of resource deployment (pod,ns,cm etc). due to dependency order deployment
 2. Application versioning and rollback :
 rollback is difficult due to K8s not provide built-in mechanism for apps versioning
 3. reusability and sharability:
-Reusing configurations across different environments is difficult due to different end need diff config. 
+Reusing configurations across different environments is difficult due to different env need diff config. 
 
 Helm: 
 Its a tool which manages the K8s based applications by providing standard approach as helm charts(tar -> collection of YAML files). its package manager for k8s.
@@ -70,7 +70,7 @@ in Helm3 patch is generated using old manifest,live state of cluster and new man
 
 4. JSON schema chart validation
 5. Release name is now required  --> In Helm2 if no name was provided then release name would be generated. Helm3 will throw error if no name is provided. 
-
+6. Helm 2, where external changes could lead to inconsistencies during rollbacks. but due to helm3 3 way strategic merge patch it will rollback successfully. 
 
 
 --------chart meseum------- (https://artifactshub.io)
@@ -95,8 +95,7 @@ chart create example-chart				--> create chart template
 2. chart.yaml: Holds metadata about chart, such as chart name, version, maintainer info,search keyword etc. 
 3. charts: dir which stores other charts that main chart depends on. 
 4. Values.yaml: holds all the values to be injected into template. Templates are rendered into K8s manifest files. 
-5. Values.schema.json: validates values.yaml file. removing any required fields will result in error as JSON schema validation fails. This check happens everytime we run 
-helm install/upgrade/template
+5. Values.schema.json: validates values.yaml file. removing any required fields will result in error as JSON schema validation fails. This check happens everytime we run helm install/upgrade/template
 6. Templates: Holds the actual manifest to be deployed with chart. i.e deployment.yaml,service.yaml,config.yaml and secrets.yaml all in the templated format. this wil all get values from values.yaml file. 
 7. LICENSE: a plaintext license for the chart
 8. NOTES.txt file: prints on command line when the chart is installed. like help menu for clients.  
@@ -144,7 +143,7 @@ helm show values bitnami/nginx  (before installation)									7. clusterRol,Cust
 helm get values <release_name> (user supplied values shows before instalation)						11. service 	
 															12. DaemonSet
 ---installing chart---													13. Pod
-hel install bitnami/nginx --generate-name  or helm install <release-name> bitnami/nginx					14. ReplicationController
+helm install bitnami/nginx --generate-name  or helm install <release-name> bitnami/nginx				14. ReplicationController
 helm list		--> list all releases										15. ReplicaSet
 helm status <release name> 												16. Deployment
 helm uninstall <release-name> 												17. StatefulSet
@@ -156,7 +155,7 @@ other ways:														20. Ingress
 4. A full url (helm install foo url)
 
 ---changing defaut values with --set ----
-helm install bitnami/nginx --set service.type=ClusterIP					--> use helm upgrade --install	 it will upgrade if existing esle install
+helm install bitnami/nginx --set service.type=ClusterIP					--> use helm upgrade --install	 it will upgrade if existing else install
 helm get values nginx
 
 --changing the default values with custom values file---
@@ -232,10 +231,13 @@ chart.Version: version of chart
 you can render charts without actually installing them. useful to test chart templates. 
 Two ways:
 1. Rendering without release info {{ Release.Name }} won't evaluate
-helm template <chart-dir> 						--> cannot replace any values that depends on release info.
-2. Rendering with release info
+helm template <chart-dir> 						--> cannot replace any values that depends on release info + wont connect to API server for validation
+2. Rendering with release info						--> connect to APi server for chart validation. 
 helm install <chart-dir> --dry-run
 
+----linting helm charts-----
+used to see errors associated with helm charts
+helm lint chartname
 
 ---values files---
 The values for the templates can be supplied in one of 3 ways
